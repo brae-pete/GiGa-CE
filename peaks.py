@@ -8,20 +8,70 @@ Created on Tue Jul 12 13:17:55 2016
 import numpy as np
 from scipy.interpolate import UnivariateSpline
 import database as db
+import peakutils
+
 
 class baseline():
     """Corrected baseline stored as correctedRFU calculated from correct
     If a separate method for baseline is needed to be called you can change
     the correct function, or add another method/function. Just call the function
-    in the GUI to call you function."""
+    in the GUI to call you function.
+
+    Additionally you can use lower_median which takes a value from a specified portion of the
+    all the numbers sorted as the baseline. This method also corrects for negative
+    y values. Preferential for UV analysis"""
     def __init__(self,rfu):
         self.rfu=rfu
-        self.firstlast50()
-        self.correctedrfu=self.correct()
+        self.correctedrfu=[]
+        self.lower_median()
+        
     def firstlast50(self,x=50):
-        first = np.average(self.rfu[:20])
-        last = np.average(self.rfu[-20:])
+        first = np.average(self.rfu[:x])
+        last = np.average(self.rfu[-x:])
         self.linecalc(first,last)
+    def lower_median(self,lower_value=0.2):
+        try:
+            sortedRfu = self.rfu[:]
+            sortedRfu.sort()
+            print(sortedRfu[0:1],lower_value,len(sortedRfu)*lower_value)
+            medianIndex=len(sortedRfu)*lower_value
+            medianIndex= int(medianIndex)
+            print(type(medianIndex), "IS ",print(medianIndex))
+            self.correctedrfu = [ i - sortedRfu[medianIndex] for i in self.rfu]
+            lowest_value = min(self.correctedrfu)
+            
+            if lowest_value<0:
+                print("Correction")
+                new_correctedrfu = [i - lowest_value for i in self.correctedrfu]
+            print("Finished", len(new_correctedrfu))
+            self.correctedrfu = new_correctedrfu
+            return new_correctedrfu
+        except Exception as e:
+            print("Did not correct baseline")
+            print(str(e))
+    def peakutils_baseline(self,polynomial,skip=0):
+        """Requires corrected RFU to be run first"""
+
+        # If polynomial is too large GigaCE freezes, this is a catch to prevent freezing
+        if polynomial > 10:
+            print("Polynomial too large")
+            return self.correctedrfu
+        
+        base=peakutils.baseline(np.array(self.correctedrfu[skip:]),polynomial)
+        print(base)
+        print(len(base))
+        Xtotal=np.linspace(0,len(base)+skip,len(base)+skip)
+        print(len(Xtotal))
+        print(Xtotal)
+        fit = np.polyfit(Xtotal[skip:],base,polynomial)
+        print(fit)
+        p = np.poly1d(fit)
+        base = p(Xtotal)
+        baseline = list(base)
+        return baseline
+    def peakutils_indexes(self,thresh=3,min_dist=1):
+        self.peak_indexes=peakutils.indexes(self.rfu,thresh,min_dist)
+        return self.peak_indexes
     def linecalc(self,y1,y2):
         xt=len(self.rfu)
         self.m=(y2-y1)/xt
@@ -44,8 +94,19 @@ class allpeakcalculations():
         self.sep_id=sep_id
         
         self.session=session
-        self.calculate()
-    def calculate(self):
+        self.calculate_mobility()
+        self.calculate_twopeaks()
+        
+    def calculate_mobility(self):
+        for instance in self.session.query(db.Peak).filter(db.Peak.run_id==self.sep_id,
+                                                            db.Peak.active.isnot(False)).\
+                                                            order_by(db.Peak.m1):
+            # Calculate mobility
+            mobility = round(self.get_mobility(instance.m1),6)
+            instance.apparentmobility=mobility
+            self.session.commit()
+        
+    def calculate_twopeaks(self):
         """Cycle through all peaks in a separation
         # for each peak calculate A %, CA %, Resolution (with the next peak), plates
         """
@@ -56,9 +117,10 @@ class allpeakcalculations():
         for instance in self.session.query(db.Peak).filter(db.Peak.run_id==self.sep_id,
                                                             db.Peak.active.isnot(False)).\
                                                             order_by(db.Peak.m1):
+            
             # Calculate area percents
-            instance.areapercent = round(float(instance.area)/Area * 100,2)
-            instance.correctedpercent = round(float(instance.correctedarea)/CArea *100,2)
+            instance.areapercent = float(instance.area)/Area * 100
+            instance.correctedpercent = float(instance.correctedarea)/CArea *100
             #Calculate plates, replace old plates if new plates is greater
             new_plates = round(self.get_plates(float(instance.m1),float(instance.fwhm)),2)
             instance.plates = new_plates
@@ -79,7 +141,8 @@ class allpeakcalculations():
             self.session.commit()
             # make sure First is false, we've been here at least once
             First = False
-            
+   
+        
     def get_plates(self, m1, fwhm):
         """Theoretical plates from Harris 8ed. (p552)"""
         P = 5.55 * (m1**2) / (fwhm**2)
@@ -90,11 +153,38 @@ class allpeakcalculations():
         dtr = new_m1 - old_m1
         R = 0.589 * dtr / wavg 
         return R
+    def get_mobility(self,m1):
+        """Apparent mobility from Weinberger 2ed. (p31)"""
+        # Retrieve Values from database
+        
+
+        instance_separation = self.session.query(db.Separation).filter(db.Separation.id==self.sep_id)
+        instance_separation = instance_separation.first()
+        kwds = eval(instance_separation.kwds)
+        try:
+            V = eval(kwds["V"])
+            Ld= eval(kwds["Ld"])
+        except:
+            print("USING DEFALUT: 15 kV and 20 cm distance to detector")
+            V = 15
+            Ld = 20
+        try:
+            
+            Lt= eval(kwds["Lc"])
+        except:
+            print("USING DEFAULT: 30 cm Column Length")
+            Lt = 30
+        m1 = m1
+        # Calculate
+        uep = (Ld/m1)/(V/Lt)
+        return uep
+    
+        
     def get_total(self):
         """Calculate the toatal AREA and Corrected AREA for all peaks in a separation"""
         area = 0
         carea= 0
-        for instance in self.session.query(db.Peak).filter(db.Peak.run_id == self.sep_id):
+        for instance in self.session.query(db.Peak).filter(db.Peak.run_id == self.sep_id,db.Peak.active.isnot(False)):
             area += float(instance.area)
             carea += float(instance.correctedarea)
         return area, carea
@@ -104,20 +194,32 @@ class peakcalculations():
     """ Requires time, rfu arrays and the start and stop values for the peak
     
     Need to account for RFU Baseline!"""
-    def __init__(self,time,RFU,value1,value2,distance2detector=20):
+    def __init__(self,time,RFU,value1,value2,distance2detector=20,poly = False, skip = 0):
         self.time=time
         self.rfu=RFU
-        print(RFU[0], "Before correction")
-        self.rfu = baseline(RFU).correct()
         
-        print(RFU[0], "After Correction")
+            
+        print(self.rfu[0], "Before correction", len(self.rfu))
+        new_baseline = baseline(self.rfu)
+        self.rfu = new_baseline.correctedrfu
+        print(self.rfu[0], "After Correction", len(self.rfu))
+        if poly != False:
+            self.rfu = np.array(self.rfu)
+            self.baseline=new_baseline.peakutils_baseline(poly,skip)
+            self.rfu = list(self.rfu-self.baseline)
         self.rnrfu,self.rntime=self.getindexes(value1,value2)
         self.distance2detector=distance2detector
         self.start=value1
         self.stop=value2
+        
         #if len(self.rnrfu)<1:
          #   print(time, "Time \n" , RFU, "RFU\n", value1,value2)
        # print(self.rnrfu)
+    def peakutil_baseline(self,polynomial=3):
+        self.rfu = np.array(self.rfu)
+        self.baseline = peakutils.baseline(self.rfu,polynomial)
+        return self.baseline
+    
     def getindexes(self,value1,value2):
         # retrieve indexes that correspond to where we selected widths on the graph
         dt=self.time[1]-self.time[0]
@@ -191,7 +293,7 @@ class peakcalculations():
         return fwhm
     def get_correctedarea(self):
         """ Area needs to be corrected or normalized for diffent mobilities
-        CA = A *v
+        CA = A * velocity
         CA = A * Ldetector / retention time or
         CA = A / retention time, this cant be compared between instruments
         """
@@ -200,4 +302,5 @@ class peakcalculations():
         correctedarea=area/m1
         print(correctedarea, " is the CA")
         return correctedarea
+    
         

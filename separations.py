@@ -57,15 +57,19 @@ class separationsmenu(tk.Frame):
         session=self.session
         
         for file in queue:
-            shortfile = file.split('/')
-            print('Shortfile', shortfile[-1])
+            if file[-3:] == 'dat':
+                print("This is a dat file, cannot load in GigaCE")
+                
+            else:
+                shortfile = file.split('/')
+                #print('Shortfile', shortfile[-1])
             
-            newrun=db.Separation(date = dt.date.today(), name = shortfile[-1])
-            session.add(newrun)
-            session.commit()
-            newfile = self.filetype(file,new_id=newrun.id)
-            newrun.filename = newfile
-            session.commit()
+                newrun=db.Separation(date = dt.date.today(), name = shortfile[-1])
+                session.add(newrun)
+                session.commit()
+                newfile = self.filetype(file,new_id=newrun.id)
+                newrun.filename = newfile
+                session.commit()
             
         # convert queue?
         frame=self.controller.frames["separationview"]
@@ -82,7 +86,7 @@ class separationsmenu(tk.Frame):
             newfile = Fileconversion.ASCconversion(filename,new_id,self.user)
             return newfile
         else:
-            print('TXT conversion is not available')
+            #print('TXT conversion is not available')
             return
             #TXTconversion(filename, new_id)
         
@@ -111,42 +115,106 @@ class separationview(tk.Frame):
 """ 
     def __init__(self,parent, controller,session,user, *args, **kwargs):
         """Requires: User(Str)"""
+        
         tk.Frame.__init__(self,parent) # initialize frame
+        
+        self.rowconfigure(0, weight = 3)
+        self.columnconfigure(0,weight = 3)
+        self.canvas = tk.Canvas(self, width = 900, height =700,highlightthickness=0, scrollregion=( 0,0,1300,1300))
+        self.canvas.grid(sticky = "NSEW")
         self.session=session
         self.selection = 0
+        self.controller = controller
         #self.session=self.dbengine.get_session()
+        
+        self.interior = interior = Frame(self.canvas)
+        self.plotframe = Frame(interior)
+        self.plotframe.grid( row = 0 , column = 0 , columnspan = 1)
+
+        self.separationframe=Frame(interior)
+        self.separationframe.grid( row = 1, column = 0, sticky = "W")
+
+        self.peakframe = Frame(interior)
+        self.peakframe.grid(row = 2, column = 0, columnspan = 2, sticky ="W")
+
         self.separationstable()
         self.peakstable()
        
         self.plot_setup()
+        self.vline1=None
+        self.vline2=None
+        # Create scroll bars
+        vbar=Scrollbar(self,orient=VERTICAL)
+        vbar.grid(row = 0, column = 1, sticky = "NS")
+        vbar.config(command=self.canvas.yview)
+        hbar=Scrollbar(self,orient=HORIZONTAL)
+        hbar.grid(row = 1, column = 0, sticky = "EW")
+        hbar.config(command=self.canvas.xview)
+        self.canvas.config(xscrollcommand=hbar.set, yscrollcommand=vbar.set)
+        self.canvas.create_window(0, 0, window=interior,
+                anchor=NW)
+        # Resize Canvas when window changes
+        self.canvas.bind("<Configure>", self.on_resize)
 
-        Addpeakbutton = Button(self,text = "Add Peak", command = self.newpeak)
-        Addpeakbutton.grid(row = 2, column =2, sticky = "W")
-        self.controller=controller
-        frame = Frame(self)
-        frame.grid(row = 4,column = 0, columnspan = 2)
-        button = Button(frame, text = "Main Menu", command = lambda: self.controller.show_frame("mainmenu"))
-        button.grid(column = 0)
-        button2 = Button(frame, text = "Export Electropherograms", command = self.export_separations)
-        button2.grid(column = 1)
+        Addpeakbutton = Button(self.peakframe,text = "Add Peak", command = self.newpeak)
+        Addpeakbutton.grid(row = 1, column =1, sticky = "NSEW")
         
+        button = Button(self.peakframe, text = "Main Menu", command = lambda: self.controller.show_frame("mainmenu"))
+        button.grid(column = 1, row =2, sticky = "NSEW")
+        button2 = Button(self.peakframe, text = "    Export \n Electropherograms", command = self.export_separations)
+        button2.grid(column = 1, row = 3, sticky = "NSEW")
+# Create labels and spinboxes for determining apparent mobility
+#Because the Voltage may not be the ohms voltage the user may change this
+#Because the Length to detector can change, the user may change this
 
-        button2 = Button(self, text = "Export Electropherograms", command = self.export_separations)
-        button2.grid(column = 2)
+        LDlabel= Label(self.separationframe, text = "Length to Detector \n (cm)")
+        LDlabel.grid(row =0, column = 1, sticky = "SW")
+        LDspin = Spinbox(self.separationframe)
+        LDspin.grid(row = 1, column = 1, sticky = "NW")
+        LDspin.delete(0,"end")
+        LDspin.insert(0,0)
+        LDcolumn = Label(self.separationframe, text = "Capillary Length \n (cm)")
+        LDcolumn.grid(row = 4, column = 1, sticky = "SW")
+        columnspin = Spinbox(self.separationframe)
+        columnspin.grid(row=5,column = 1, sticky = "NW")
+        columnspin.delete(0,"end")
+        columnspin.insert(0,0)
+        
+        self.columnspin = columnspin
+        self.LDspin=LDspin
+        
+        Voltagelabel = Label (self.separationframe, text = "Voltage")
+        Voltagelabel.grid(row = 2, column = 1, sticky = "SW")
+        Voltagespin= Spinbox(self.separationframe)
+        Voltagespin.grid(row = 3, column = 1, sticky = "NW")
+        Voltagespin.delete(0,"end")
+        Voltagespin.insert(0,0)
+        self.Vspin=Voltagespin
+        self.peak_edit_first = True
+
+        self.peak_edit(0,initial = True)
         #self.tree.grid()
-
+    def on_resize(self, event):
+        self.canvas.width = event.width
+        self.canvas.height = event.height
+        self.canvas.config(width = self.canvas.width, height = self.canvas.height)
+        
     def separationstable(self):
-        tree= Treeview(self)
+        tree= Treeview(self.separationframe)
+
+        #scrollbar = Scrollbar(self, orient="horizontal", command = tree.xview)
+        #tree.configure(xscrollcommand=scrollbar.set)
+        #scrollbar.grid(row = 3, column = 0, sticky = "NWE")
         # Define Columns
         tree["columns"]=("ID","Name","Short Name",
                          "Buffer", "INJ Volume", "Plates")
         tree.column("ID", width = 25)
-        tree.column("Short Name", width = 75)
+        tree.column("Short Name", width = 100)
         tree.column("INJ Volume", width = 80)
         tree.column("Plates", width = 50)
-        tree.column("Buffer", width = 100)
-        tree.column("Name", width = 125)
-        tree.column("#0", width = 150)
+        tree.column("Buffer", width = 110)
+        tree.column("Name", width = 225)
+        tree.column("#0", width = 125)
         # Define Headings
         #tree.heading("Date", text = "Date")
         tree.heading("ID", text = "ID")
@@ -158,7 +226,7 @@ class separationview(tk.Frame):
         # Define Event binding for selection
         tree.bind("<ButtonRelease-1>",self.separation_selection)
         #Call function to populate table
-        tree.grid(sticky = "NWE")
+        tree.grid(sticky = "NWS", rowspan = 8)
         self.tree = tree
         self.fillseparationstable()
         
@@ -172,11 +240,11 @@ class separationview(tk.Frame):
         separationrows={}
         dates=[]
         session = self.session
-        print("Here?")
-        for instance in session.query(db.Separation).filter(db.Separation.active.isnot(False)).order_by(db.desc(db.Separation.date)):
+        #print("Here?")
+        for instance in session.query(db.Separation).filter(db.Separation.active.isnot(False)).order_by(db.Separation.date):
             separationrows[instance.id]=instance
             if dates.count(instance.date.isoformat())==0:
-                print(instance.id)
+                #print(instance.id)
                 #insert directory, label directory from datetime time isoform
                 self.tree.insert("",0,instance.date.isoformat(),text = instance.date.isoformat())
                 dates.append(instance.date.isoformat())
@@ -209,20 +277,19 @@ class separationview(tk.Frame):
         peak=db.Peak(name = "New", run_id= self.instance.id)
         sesh.add(peak)
         sesh.commit()
-        self.fillpeakstable(self.peaksqueue)
-        
+        self.fillpeakstable(self.peaksqueue)    
     def peakstable(self):
         
-        tree= Treeview(self)
-        scrollbar = Scrollbar(self, orient="horizontal", command = self.tree.xview)
-        self.tree.configure(xscrollcommand=scrollbar.set)
-        scrollbar.grid(row = 3, column = 0, sticky = "NWE")
+        tree= Treeview(self.peakframe)
+        scrollbar = Scrollbar(self, orient="horizontal", command = tree.xview)
+        tree.configure(xscrollcommand=scrollbar.set)
+        scrollbar.grid(row = 5, column = 0, sticky = "NWE")
         #self.peakcanvas.create_window((0,0),window = tree, anchor = "nw")
         
         #Define Columns
         tree["columns"]=("ID","Run", "Center",
                          "Width at 1/2H", "Corrected Area", "Corrected Area %",
-                         "Resolution", "Plates", "M2", "M3", "M4", "Max",)
+                         "Resolution", "Plates","Uep", "M2", "M3", "M4", "Max",)
         #Define Headings
         tree.column("ID", width = 25)
         tree.column("Corrected Area", width = 50)
@@ -230,6 +297,7 @@ class separationview(tk.Frame):
         tree.column("Width at 1/2H", width = 50)
         tree.column("Center", width = 50)
         tree.column("Plates", width = 50)
+        tree.column("Uep", width = 50)
         tree.column("M2", width = 40)
         tree.column("M4", width = 40)
         tree.column("M3", width = 40)
@@ -245,6 +313,7 @@ class separationview(tk.Frame):
         #tree.heading("Separation", text = "Separation")
         tree.heading("Center", text = "Tr")
         tree.heading("Plates", text = "P")
+        tree.heading("Uep", text = "Uep (cm^2/(Vs))")
         tree.heading("M2", text = "M2")
         tree.heading("M3", text = "M3")
         tree.heading("M4", text = "M4")
@@ -256,7 +325,7 @@ class separationview(tk.Frame):
         #tree.heading("Name", text = "Name")
         tree.heading("ID", text = "ID")
         tree.heading("#0", text = "Name")
-        tree.grid(row = 2, column =0)
+        tree.grid(row = 1, column =0, rowspan = 4)
         # Bind event when item is selected
         tree.bind("<ButtonRelease-1>",self.peak_selection)
         #tree.config(scrollregion = ("left", "top", "right", "bottom"))
@@ -281,18 +350,17 @@ class separationview(tk.Frame):
         if len(selectionlist)==0 :
             return
         for instance in session.query(db.Peak).filter(db.Peak.run_id.in_(selectionlist),db.Peak.active.isnot(False)):
-            print(instance.id, "is peak id", instance.name)
+            #print(instance.id, "is peak id", instance.name)
             if peak.count(instance.name) == 0:
                 self.treepeak.insert("",END,instance.name,text = instance.name, open=True)
                 peak.append(instance.name)
             runname = session.query(db.Separation).filter(db.Separation.id == instance.run_id)
             runname = runname.first()
             runname = runname.name
-
             values = [ instance.id, runname, instance.m1,
                        instance.fwhm, instance.correctedarea,
                        instance.correctedpercent, instance.resolution,
-                       instance.plates,
+                       instance.plates, instance.apparentmobility,
                        instance.m2, instance.m3, instance.m4,
                        instance.maxtime]
             self.treepeak.insert(instance.name,0,instance.id,
@@ -331,14 +399,13 @@ class separationview(tk.Frame):
         separation id's for the higlighed rows"""
         selection = self.treepeak.selection() # get selected rows
         queue=[]
-        print("selection is ::" , selection)
         #print("Selection is ", selection)
         first = True
         self.displayelectropherogram(self.data)
         for instance in self.session.query(db.Peak).filter(db.Peak.id.in_(selection)).order_by(db.Peak.area.desc()):
             item = instance.id
         #for item in selection:
-            print(item)
+            
             if first:
                 self.peak_edit(item) # Allow first selection item to be edited
             self.plot_area(item)
@@ -353,14 +420,27 @@ class separationview(tk.Frame):
         start = instance.starttime
         stop = instance.stoptime
         #X = np.arange(start,stop,0.25)
+        """
         query = self.session.query(db.Separation).filter(db.Separation.id == instance.run_id)
         separation = query.first()
         Time,RFU = Fileconversion.Readfile(separation.filename,True,True,False,False)
+        new_baseline = peaks.baseline(RFU)
+        
+            
+        RFU = new_baseline.correctedrfu
+        """
+        name,Time,RFU = self.rfu_data[instance.run_id]
         time = np.asarray(Time)
         if start != None and stop != None:
             condition = np.all([time >=start, time<=stop],axis = 0 )
-            color = self.colors[separation.id]
-            self.plotsubplot.fill_between(Time,0,RFU, where =condition,interpolate = True, color =color)
+            color = self.colors[instance.run_id]
+            try:
+               name,time,base = self.rfu_data[-instance.run_id] 
+                #base = new_baseline.peakutils_baseline(eval(self.polyspin.get()),eval(self.skipspin.get()))
+            except Exception as e:
+                #print(e)
+                base=0
+            self.plotsubplot.fill_between(Time,base,RFU, where =condition,interpolate = True, color =color)
         self.plotcanvas.draw()
         
     def separation_edit(self, sep_id):
@@ -368,6 +448,7 @@ class separationview(tk.Frame):
         User can edit: Name, Short Name (Text box)
         Buffer (Combobox)
         INJ Volume (Popup window)
+        Apparent mobility (spinboxes)
         """
         # Retrieve information
         sesh = self.session
@@ -377,15 +458,15 @@ class separationview(tk.Frame):
         self.buffers = {}
         self.bufferids={}
     
-        print(instance)
-        for buffer in sesh.query(db.Buffer):
+        #print(instance)
+        for buffer in sesh.query(db.Buffer).order_by(db.Buffer.name):
             self.buffers[buffer.name]=buffer.id
             self.bufferids[buffer.id]=buffer.name
         self.volume = instance.injectionvolume
 
         # Create Widgets
-        editframe=Frame(self)
-        editframe.grid(column = 0, row = 1, sticky = "NWE")
+        editframe=Frame(self.separationframe)
+        editframe.grid(column = 0, row = 11, columnspan = 2, sticky = "NWE")
         namelabel = Label(editframe, text = "Name: ")
         namelabel.grid(row = 0, column = 0)
         self.nameentry= Entry(editframe, text = instance.name)
@@ -396,7 +477,10 @@ class separationview(tk.Frame):
         self.shortnameentry.grid(row = 1, column = 1)
         bufferlabel = Label(editframe, text = "Buffer: ")
         bufferlabel.grid(row = 0, column = 2)
-        self.bufferbox = Combobox(editframe, values = list(self.buffers.keys()))
+        bufferlist = list(self.buffers.keys())
+        bufferlist.sort()
+        
+        self.bufferbox = Combobox(editframe, values = bufferlist)
         self.bufferbox.grid(row = 1, column = 2)
         injectionbutton= Button(editframe, text = 'Set Injection Volume',
                                 command = self.get_injectionvolume)
@@ -408,15 +492,52 @@ class separationview(tk.Frame):
                            command =self.delete_separation)
         deletesep.grid(row = 0, column = 4)
 
+        
+
         # set the entry boxes to appropriate values
         self.nameentry.delete(0,"end")
         self.nameentry.insert(0,instance.name)
 
         self.shortnameentry.delete(0,"end")
         self.shortnameentry.insert(0,str(instance.shortname))
+
+       
         if instance.buffer_id != None:
+            
             self.bufferbox.set(self.bufferids[instance.buffer_id])
-    def peak_edit(self, peak_id):
+            
+            buffer_instance = sesh.query(db.Buffer).filter(db.Buffer.id == instance.buffer_id)
+            buffer_instance = buffer_instance.first()
+            
+            # Set the voltage to either Keword (first choice) or Buffer Voltage (second choice)
+        if instance.kwds != None:
+            # #print("here we are", instance.kwds)
+            kwds = eval(instance.kwds)
+            
+            self.Vspin.delete(0,"end")
+            self.Vspin.insert(0,eval(kwds["V"]))
+            #print("and we changed", kwds)
+            self.LDspin.delete(0,"end")
+            self.LDspin.insert(0,eval(kwds["Ld"]))
+            #print("To the end!!!")
+            try:
+                self.columnspin.delete(0,"end")
+                self.columnspin.insert(0,eval(kwds["Lc"]))
+            except:
+                self.columnspin.delete(0,"end")
+                self.columnspin.insert(0,30)
+            try:
+                self.polyspin.delete(0,"end")
+                self.polyspin.insert(0,eval(kwds["degree"]))
+                self.poly_value.set(kwds["poly_value"])
+                self.skipspin.delete(0,"end")
+                self.skipspin.insert(0,eval(kwds["skip"]))
+
+            except:
+                self.poly_value.set(0)
+                
+        
+    def peak_edit(self, peak_id,initial=False):
         """ Retrieves info for the sep_id
         User can edit: Name, Short Name (Text box)
         Buffer (Combobox)
@@ -425,55 +546,127 @@ class separationview(tk.Frame):
         
         # Retrieve information
         try:
-            self.editframe.destroy()
+            if self.peak_edit_first == True:
+                self.textvar_peakshortname = StringVar()
+                self.textvar_peakname = StringVar()
+                self.peak_edit_first = False
+                # Create Widgets
+                self.editframe=editframe=Frame(self.peakframe)
+                editframe.grid(column = 0, row = 0, sticky = "NWE")
+                namelabel = Label(editframe, text = "Name: ")
+                namelabel.grid(row = 0, column = 0)
+                self.peaknameentry= Entry(editframe,textvariable = self.textvar_peakname)
+                self.peaknameentry.grid(row = 1, column = 0)
+                shortnamelabel = Label(editframe, text = "Shortname: ")
+                shortnamelabel.grid(row = 0, column = 1)
+           
+                
+                self.peakshortnameentry = Entry(editframe, textvariable = self.textvar_peakshortname)
+                self.peakshortnameentry.grid(row = 1, column = 1)
+           
+                #self.peakbaseline = Button(editframe, command = self.set_baseline)
+                #self.peakbaseline.grid(row = 1, column = 2)
+                widthbutton= Button(editframe, text = 'Set Width',
+                                    command = self.set_width)
+                widthbutton.grid(row = 1, column = 2)
+                saveeditsbutton= Button (editframe, text = "Save Edits",
+                                         command = self.save_peakedits)
+                saveeditsbutton.grid(row = 1, column = 4)
+
+                self.peakdelete= Button(editframe, text = "DELETE Peak", command = self.delete_peak)
+                self.peakdelete.grid(row =0, column = 4)
+
+                #Polynomial Buttons
+                try:
+                    self.poly_value = IntVar(editframe)
+                    self.poly_value.set(0)
+                    poly_button = Checkbutton(editframe,text = "Poly Baseline",
+                                          variable = self.poly_value,command = self.cb)
+                    poly_button.grid(row = 0, column = 5, columnspan = 2)
+                    polylabel = Label(editframe, text = "Degree")
+                    polylabel.grid(row = 1, column =6)
+                    self.polyspin= Spinbox(editframe, width = 5)
+                    self.polyspin.grid(row = 1, column = 5, sticky ="E")
+                    self.polyspin.delete(0,"end")
+                    self.polyspin.insert(0,3)
+
+                    
+                    self.skipspin = Spinbox(editframe, width = 5)
+                    self.skipspin.grid(row = 1, column = 6,padx=5)
+                    self.skipspin.insert(0,0)
+                    skiplabel = Label(editframe,text = "First Data to Skip")
+                    skiplabel.grid(row = 1, column = 7, sticky = "W")
+                    
+                except Exception as e:
+                    print(e)
+                """-
+                #Index Buttons
+                indexbutton=Button(editframe,text = "AutoPeaks",command = self.auto_peak)
+                indexbutton.grid(row = 0, column = 7, columnspan = 1)
+                self.threshspin = Spinbox(editframe,from_= 0 , to= 1,  width =5)
+                self.threshspin.grid(row = 0, column = 8)
+                threshlabel = Label(editframe,text = "Thresh(0-1)")
+                threshlabel.grid(row = 0, column = 9)
+                self.distspin = Spinbox(editframe, width = 5)
+                self.distspin.grid(row=1,column =8)
+                distlabel = Label(editframe, text = "Index Separation")
+                distlabel.grid(row =1, column = 9)
+                self.threshspin.delete(0,"end")
+                self.distspin.delete(0,"end")
+                self.threshspin.insert(0,0.5)
+                self.distspin.insert(0,1)
+                """
+                
+            
+
+            
         except:
-            flag=True
+            print("Already have editframe")
+        if initial:
+            return
         sesh = self.session
         instance = sesh.query(db.Peak).filter(db.Peak.id == peak_id)
         instance = instance.first()
-        print("peak_id is ", peak_id)
         separation = sesh.query(db.Separation).filter(db.Separation.id == instance.run_id)
         separation = separation.first()
         self.peakinstance = instance
-        # set width
-        
         self.coords=[instance.starttime,instance.stoptime]
         
-        print(instance)
-        
         # Create Widgets
-        self.editframe=editframe=Frame(self)
-        editframe.grid(column = 1, row = 2, sticky = "NWE")
-        namelabel = Label(editframe, text = "Name: ")
-        namelabel.grid(row = 0, column = 0)
-        self.peaknameentry= Entry(editframe, text = instance.name)
-        self.peaknameentry.grid(row = 1, column = 0)
+        editframe = self.editframe
+        self.peaknameentry
         shortnamelabel = Label(editframe, text = "Shortname: ")
         shortnamelabel.grid(row = 0, column = 1)
-        self.peakshortnameentry = Entry(editframe, text = instance.shortname)
-        self.peakshortnameentry.grid(row = 1, column = 1)
        
+        if instance.shortname != None:
+            
+            
+            self.textvar_peakname.set(instance.name)
+            self.textvar_peakshortname.set(instance.shortname)
+
+            self.peakshortnameentry.delete(0,"end")
+            #print(instance.shortname , "is the shortname")
+            self.peakshortnameentry.insert(0,self.textvar_peakshortname.get())
+
+            self.peaknameentry.delete(0,"end")
+            self.peaknameentry.insert(0,self.textvar_peakname.get())
+
+            
+            
         #self.peakbaseline = Button(editframe, command = self.set_baseline)
         #self.peakbaseline.grid(row = 1, column = 2)
-        widthbutton= Button(editframe, text = 'Set Width',
-                                command = self.set_width)
-        widthbutton.grid(row = 1, column = 2)
-        saveeditsbutton= Button (editframe, text = "Save Edits",
-                                 command = self.save_peakedits)
-        saveeditsbutton.grid(row = 1, column = 4)
-
-
+        """
         # set the entry boxes to appropriate values
         self.peaknameentry.delete(0,"end")
         self.peaknameentry.insert(0,instance.name)
 
         self.peakshortnameentry.delete(0,"end")
         self.peakshortnameentry.insert(0,str(instance.shortname))
-
-        self.peakdelete= Button(editframe, text = "DELETE Peak", command = self.delete_peak)
-        self.peakdelete.grid(row =0, column = 4)
-    
+        """
         
+        return
+    def cb(self):
+        #print("this is value", self.poly_value.get())
         return
     def delete_peak(self):
         self.peakinstance.active = False
@@ -482,6 +675,7 @@ class separationview(tk.Frame):
         
     def delete_separation(self):
         self.instance.active = False
+        self.session.commit()
         # Reload separations
         self.fillseparationstable()
         
@@ -506,9 +700,20 @@ class separationview(tk.Frame):
         # Make changes
         self.instance.name = self.nameentry.get()
         self.instance.shortname = self.shortnameentry.get()
-        bufferid = self.buffers[self.bufferbox.get()]
-        self.instance.buffer_id = bufferid
+        try:
+            bufferid = self.buffers[self.bufferbox.get()]
+            self.instance.buffer_id = bufferid
+        except:
+            pass
         self.instance.injectionvolume = self.volume
+        kwds={}
+        kwds["Ld"]=self.LDspin.get()
+        kwds["V"]=self.Vspin.get()
+        kwds["Lc"]=self.columnspin.get()
+        kwds["poly_value"]=self.poly_value.get()
+        kwds["degree"]=self.polyspin.get()
+        kwds["skip"]=self.skipspin.get()
+        self.instance.kwds=str(kwds)
         
         #Commit changes to database
         self.session.commit()
@@ -539,17 +744,40 @@ class separationview(tk.Frame):
         data = {}
         for instance in sesh.query(db.Separation).filter(db.Separation.id.in_(queue)):
             Time,RFU=Fileconversion.Readfile(instance.filename)
+            new_baseline = peaks.baseline(RFU)
+            poly_value = False
+            #print(self.poly_value.get(), "IS POLY VLU")
+            try:
+                if instance.kwds != None:
+                    # #print("here we are", instance.kwds)
+                    kwds = eval(instance.kwds)
+                    if kwds["poly_value"]==1:
+                        poly_value = 1
+                        degree = eval(kwds["degree"])
+                        skip= eval(kwds["skip"])
+                    else:
+                        poly_value = False
+            except Exception as e:
+                #print(e)
+                poly_value = False
+            #print(type(poly_value),poly_value, "is recorded polyvalue")
+            if poly_value==1:
+                baseline = new_baseline.peakutils_baseline(degree,skip)
+                data[-instance.id]=[instance.shortname+'BASELINE',Time,baseline]
+            RFU = new_baseline.correctedrfu
+            
             data[instance.id]=[instance.shortname,Time,RFU]
+        self.rfu_data=data
         self.displayelectropherogram(data=data) # Pass data to plot
-        print("Queue is still {} at load_separation".format(queue))
-        self.plotcanvas.draw()
+       #print("Queue is still {} at load_separation".format(queue))
+        #self.plotcanvas.draw()
     
     def plot_setup(self):
         """Plot setup at the __init__ stage"""
     #Set up canvas, and figure widgets
-        plotframe = Frame(self)
-        plotframe.grid(column = 1, row = 0, rowspan = 2, sticky = "NWE")
-        plotfigure= Figure(figsize=(6.25,3))
+        plotframe = Frame(self.plotframe)
+        plotframe.grid(column = 0, row = 0, sticky = "NWE")
+        plotfigure= Figure(figsize = (10,5))
         self.plotsubplot=plotfigure.add_subplot(111)
         self.plotcanvas = FigureCanvasTkAgg(plotfigure, plotframe)
         self.plotcanvas.show()
@@ -569,11 +797,20 @@ class separationview(tk.Frame):
         colors = ['orange','lightslategray','indianred','seagreen','mediumorchid','lightcoral']
         pick = 0
         self.colors={}
+        first_baseline= True
         for separation in data:
             #Plot Time, RFU and give each line a label for a legend
             label = data[separation][0]
             if label == None:
                 label = ""
+            #print(separation, "is separatoin")
+            try:
+                if separation < 0 and first_baseline:
+                    first_baseline = False
+                elif separation< 0 and not first_baseline:
+                    continue
+            except Exception as e:
+                pass
             self.colors[separation]=colors[pick]
             self.plotsubplot.plot(data[separation][1],data[separation][2],label = data[separation][0], color = colors[pick])
             pick +=1
@@ -584,16 +821,33 @@ class separationview(tk.Frame):
         return
     def remove_lines(self):
         "Called when setting peak information"
-        self.vline1.remove()
-        self.vline2.remove()
+        try:
+            self.vline1.remove()
+            self.vline2.remove()
+        except:
+            return
         try:
             v1,v2=self.canvascoords['current']
             v1.remove()
             v2.remove()
         except:
-            print("no Lines")
+            pass
+            #print("no Lines")
+    def auto_peak(self):
+        sesh = self.session
+        query = self.session.query(db.Separation).filter(db.Separation.id == self.instance.id)
+        separation = query.first()
+        data = Fileconversion.Readfile(separation.filename,True,True)
+
+        baseline = peaks.baseline(data[1])
+        
+        
+        peak=db.Peak(name = "New", run_id= self.instance.id)
+        sesh.add(peak)
+        sesh.commit()
+        self.fillpeakstable(self.peaksqueue)  
     def save_peakedits(self):
-        print("Welcome to Peak edits save!")
+        #print("Welcome to Peak edits save!")
         coords=self.coords
         inst = self.peakinstance
         inst.starttime=coords[0]
@@ -606,7 +860,15 @@ class separationview(tk.Frame):
         separation = query.first()
         data = Fileconversion.Readfile(separation.filename,True,True)
         #print(data)
-        peak=peaks.peakcalculations(data[0],data[1],coords[0],coords[1])
+        
+        if self.poly_value.get() == 1:
+            poly =  eval( self.polyspin.get())
+            skip = eval(self.skipspin.get())
+        else:
+            poly = False
+            skip = 0
+        peak=peaks.peakcalculations(data[0],data[1],coords[0],coords[1],poly = poly,skip=skip)
+        
         #inst.('peaknumber',place)
         inst.name = self.peaknameentry.get()
         inst.shortname= self.peakshortnameentry.get()
@@ -617,12 +879,16 @@ class separationview(tk.Frame):
         inst.m3=round(peak.get_m3(),4)
         inst.m4=round(peak.get_m4(),4)
         inst.fwhm=round(peak.get_fwhm(),2)
-        inst.area=round(peak.get_area(),2)
-        inst.correctedarea=round(peak.get_correctedarea(),2)
+        inst.area=peak.get_area()
+        inst.correctedarea=peak.get_correctedarea()
         # Calculate percent area and resolution and plates
-        allpeak=peaks.allpeakcalculations(self.instance.id,self.session)
-        
-        
+        try:
+            allpeak=peaks.allpeakcalculations(self.instance.id,self.session)
+        except Exception as e:
+            #pass
+            #print("Not enough data for percent area and plates")
+            #allpeak=peaks.allpeakcalculations(self.instance.id,self.session)
+            print(e)
         #Add the row to the database 
         self.session.commit()
         # Reload the plot

@@ -37,13 +37,13 @@ class UltraCEapp(tk.Tk):
                   separations.separationsmenu,
                   separations.separationview)):
 
-            frame = F(container, self, session, 'Brae')
+            frame = F(container, self, session, User)
 
             self.frames[key] = frame
 
             frame.grid(row=0, column=0, sticky="nsew")
 
-        self.show_frame("mainmenu")
+        self.show_frame("separationview")
         
     def show_frame(self, cont):
         """Moves the frame of interest to the top"""
@@ -58,14 +58,12 @@ class mainmenu(tk.Frame):
 
         # Create buttons that will move between different windows
 
-        bufferbutton=tk.Button(self, text = "Go to Buffer Settings",
-                               command = lambda: controller.show_frame\
-                               (buffersettings.buffersettings))
+        bufferbutton=tk.Button(self, text = "Go to Buffer Settings"
+                              )
         
         bufferbutton.grid()
-        instrumentbutton=tk.Button(self, text = "Go to Instrument Settings",
-                                command = lambda: controller.show_frame\
-                               (instrumentsettings.instrumentsettings))
+        instrumentbutton=tk.Button(self, text = "Go to Instrument Settings"
+                                )
         instrumentbutton.grid()
         ohmsbutton=tk.Button(self, text = "Go to Ohms Plots",
                                 command = lambda: controller.show_frame\

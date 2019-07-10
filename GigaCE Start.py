@@ -1,12 +1,13 @@
-""" From: start
-    To: mainmenu
-    
+"""
+To Run Giga CE press F5
+
 """
 import tkinter as tk
 from tkinter import *
 from tkinter.ttk import *
 import mainmenu as mm
 class username(tk.Frame):
+    t = 1
     """Username Prompt
     Select USERNAME
        1) Username List
@@ -21,8 +22,10 @@ class username(tk.Frame):
 
 class User_window():
     """This class will prompt for a user """
-
+    from time import sleep
     def __init__(self):
+        print("Loading")
+        self.sleep(1)
         self.start()
         self.user = "Default"
 
@@ -80,5 +83,6 @@ class adduser(tk.Frame):
         #self.parent.destroy()
         app.mainloop()
         
-app = User_window()
+app = user([],'Default')
+
 

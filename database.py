@@ -56,7 +56,7 @@ class Separation(Base):
     injectiontype=Column(String)
     injectionvolume=Column(Integer)
     filename=Column(String)
-    kwds=Column(String)
+    kwds=Column(String) #[Ld:(cm), V:(V)]
     ##relationships
     #one to many
     runpeaks=relationship("Peak",back_populates='run',cascade="all, delete, delete-orphan")
@@ -169,9 +169,8 @@ class Buffer(Base):
     composition = relationship("Additive", back_populates='bufferc')
     
     def __repr__(self):
-        return "<Buffer(name={},ohsfile={},ionicstrength={},eoflow={},ohmsvoltage={},pH={},additive={},additivevolume={},additive2={},additive2volume={})>"\
-        .format(self.name,self.ohmsfile,self.ionicstrength,self.eoflow,\
-        self.ohmsvoltage,self.pH)
+        return "<Buffer(name={},ohsfile={},ionicstrength={},eoflow={}>"\
+        .format(self.name,self.ohmsfile,self.ionicstrength,self.eoflow)
 class Chemical(Base):
     __tablename__='chemicals'
     id = Column(Integer,primary_key=True)

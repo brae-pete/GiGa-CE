@@ -13,7 +13,11 @@ def ExportEgrams(ids,saveas,session):
         if T > time: # Let our longest run set the X axis
             time = T
         #data['Time']=time
-        data[i.shortname]=RFU
+        if i.shortname == None or i.shortname == "None":
+            shortname = i.name
+        else:
+            shortname = i.shortname
+        data[shortname]=RFU
     # Write our data to a CSV File
 
     fopen = open(saveas,'w')
