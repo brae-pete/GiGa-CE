@@ -37,7 +37,10 @@ class UltraCEapp(tk.Tk):
                   separations.separationsmenu,
                   separations.separationview)):
 
-            frame = F(container, self, session, User)
+            try:
+                frame = F(container, self, session, User, dbengine)
+            except TypeError:
+                frame = F(container, self, session, User)
 
             self.frames[key] = frame
 

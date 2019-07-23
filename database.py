@@ -336,7 +336,7 @@ sesh = sessionmaker(bind = engine)
 run1=Separation(project='AKT', date = dt.date(2015,6,22))
 #run2=Run(project='AKT',subproject='mRNA', date = dt.date(2015,6,24),voltage=1205,preamp=150,laserhv=488,capillaryid=50,cellline='AKT',file='Dunno',injection='Hydrodynamic',injectiontime='160',injectionpressure='5psi',injectionvoltage='10kv')
         
-        
-dbengine=database_engines("Alyssa")
-sesh=dbengine.get_session()
+if __name__ == "__main__":
+    dbengine=database_engines("David")
+    sesh=dbengine.get_session()
 
