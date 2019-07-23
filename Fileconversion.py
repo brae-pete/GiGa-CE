@@ -1,8 +1,22 @@
 import os
 import datetime as dt
 import database as db
+import pandas as pd
+
 
 def ExportEgrams(ids,saveas,session):
+    """
+    During egram export,
+    in same query,
+    add second loop for second file
+    loop through peaks.
+    rows == peaks
+    columns == shortname/name
+    values == CA
+    
+    
+    """ 
+    
     time = []
     data = {}
     saveas = saveas + '.csv'
@@ -38,6 +52,23 @@ def ExportEgrams(ids,saveas,session):
         fopen.write('\n')
     fopen.close()
 
+def ExportPeaks(ids, saveas, engine):
+    """ Reads in database using raw engine connection. Joins separation and peaks database
+    rearranges data so names is in front
+    sorts and groups the data by peak name then by run id
+    saves to a csv
+    """
+    print("Starting")
+    if saveas[-4:] != '.csv':
+        saveas = saveas + '.csv'
+    con = engine.engine.raw_connection()
+    peaks = pd.read_sql_query("select * from peaks", con)
+    runs = pd.read_sql_query("select id, name, shortname, date from separations", con)
+    joined = peaks.join(runs.set_index('id'), on='run_id', how = 'left', lsuffix='_left', rsuffix='_right')
+    joined = joined[joined.run_id.isin(ids)].sort_values(['name_left','run_id'])
+    joined.to_csv(saveas)
+    print("saved")
+    
     
         
 def getfolder(user):

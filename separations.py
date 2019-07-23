@@ -113,7 +113,7 @@ class separationview(tk.Frame):
         Exports selected separations to csv for ORIGIN
         Exports selected separations+peak info for excel    
 """ 
-    def __init__(self,parent, controller,session,user, *args, **kwargs):
+    def __init__(self,parent, controller,session,user,engine, *args, **kwargs):
         """Requires: User(Str)"""
         
         tk.Frame.__init__(self,parent) # initialize frame
@@ -123,6 +123,7 @@ class separationview(tk.Frame):
         self.canvas = tk.Canvas(self, width = 900, height =700,highlightthickness=0, scrollregion=( 0,0,1300,1300))
         self.canvas.grid(sticky = "NSEW")
         self.session=session
+        self.engine = engine
         self.selection = 0
         self.controller = controller
         #self.session=self.dbengine.get_session()
@@ -163,6 +164,9 @@ class separationview(tk.Frame):
         button.grid(column = 1, row =2, sticky = "NSEW")
         button2 = Button(self.peakframe, text = "    Export \n Electropherograms", command = self.export_separations)
         button2.grid(column = 1, row = 3, sticky = "NSEW")
+        buttonpeakexport = Button(self.peakframe, text = " Export Peaks", command = self.export_peaks)
+        buttonpeakexport.grid(column = 1, row = 4, sticky = "NSEW")
+        
 # Create labels and spinboxes for determining apparent mobility
 #Because the Voltage may not be the ohms voltage the user may change this
 #Because the Length to detector can change, the user may change this
@@ -269,6 +273,10 @@ class separationview(tk.Frame):
     def export_separations(self):
         filename = dialog.asksaveasfilename()
         Fileconversion.ExportEgrams(self.peaksqueue,filename,self.session)
+
+    def export_peaks(self):
+        filename = dialog.asksaveasfilename()
+        Fileconversion.ExportPeaks(self.peaksqueue,filename,self.engine)
     def newpeak(self):
         """Called to create a new peak
         Creates a new peak instance in db
