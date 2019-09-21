@@ -8,7 +8,7 @@ from tkinter.ttk import *
 from tkinter import filedialog
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2TkAgg
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 #import mainmenu
 import tkinter.filedialog as dialog
 import database as db
@@ -86,8 +86,8 @@ class separationsmenu(tk.Frame):
             newfile = Fileconversion.ASCconversion(filename,new_id,self.user)
             return newfile
         else:
-            #print('TXT conversion is not available')
-            return
+            newfile = Fileconversion.CSV_conversion(filename,new_id,self.user)
+            return newfile
             #TXTconversion(filename, new_id)
         
         
@@ -788,11 +788,11 @@ class separationview(tk.Frame):
         plotfigure= Figure(figsize = (10,5))
         self.plotsubplot=plotfigure.add_subplot(111)
         self.plotcanvas = FigureCanvasTkAgg(plotfigure, plotframe)
-        self.plotcanvas.show()
+        self.plotcanvas.draw()
         self.plotcanvas.get_tk_widget().grid(column = 0 ,row = 0)
         plottool=tk.Frame(plotframe)
         plottool.grid(column = 0, row = 1, rowspan = 1)
-        toolbar=NavigationToolbar2TkAgg(self.plotcanvas,plottool)
+        toolbar=NavigationToolbar2Tk(self.plotcanvas,plottool)
         toolbar.update()
         plotfigure.canvas.mpl_connect('button_press_event',self.plotclick)
         # set flags for plotclick
