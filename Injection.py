@@ -6,9 +6,9 @@ class injectionwindow():
     """This will output volumes
     Call start to open new window
     Volume will be stored after dialog as Volume"""
-    def __init__(self, buffer_instance,parent):
+    def __init__(self, length, parent):
         buffer_id = 3 #buffer_instance.id #buffer_instance.id
-        self.capillarylength = 30 #buffer_instance.capillarylength#buffer_instance.capillarylength
+        self.capillarylength = length #buffer_instance.capillarylength#buffer_instance.capillarylength
         self.capillarylumen = 50 # buffer_instance.capillarylumen #buffer_instance.capillarylumen
         parent.volume = 9.9 # Standard volume for 50 um CID
         self.parent = parent
@@ -277,14 +277,22 @@ class hydrostatic(tk.Frame):
         L = self.Lengthedit.get()
         CL = self.CLedit.get()
         T = self.Tedit.get()
-        if self.Heightedit == '':
-            P = 9.8 * float(self.heightedit.get())
-        else:
-            P = float(self.Pressureedit.get())
-       
         t = self.timeedit.get()
         vis = self.viscosityedit.get()
-        Vinj = calchydrodynamic(P,float(CL)/2,float(t),float(vis),float(L))
+        density = 997# kg/ms2
+        try:
+            P = float(self.Pressureedit.get())
+            Vinj = calchydrodynamic(P, float(CL) / 2, float(t), float(vis), float(L))
+        except ValueError:
+            P = self.Heightedit.get()
+            print('height is {}'.format(P))
+            P = float(self.Heightedit.get())/100 * density * 9.8
+            print('{} is P'.format(P))
+            Vinj = calchydrodynamic(P, float(CL), float(t), float(vis), float(L),gravity=True)
+
+       
+
+
         self.starter.set_Volume(Vinj)
         self.Volume['text']='{} nL injected'.format(Vinj)
     def viscosity_calc(self,event):
@@ -319,22 +327,23 @@ def totalvolume (radius, length):
     print("total volume: ", volume)
     return volume
 
-def calchydrodynamic(pressure,radius,time,viscosity,length):
+def calchydrodynamic(pressure,diameter,time,viscosity,length,gravity=False):
     """pressure:psi, radius:um, time:s, temp:C, length:cm"""
-    pressure=pressure_convert(pressure)
-    length = length/100
-    radius = radius*10**-6
+    try:
 
-    print('viscosity', viscosity)
-    volume= pressure / (8 * viscosity * length ) * radius**4 * 3.1416 * time
-    volume=volume*1e3 # to Liters
-    volume = volume * 1e9 # to nL
-    volume = round(volume,2)
-    
-    velocity = pressure / (8 * viscosity * length ) * radius**2
-    print('velocity ', velocity)
-    print(printvolume(volume,radius,length))
+        # Pressure(Pa) * Diameter(cm)^4 * PI / [ 128 * viscosity (Pa s) Length ] = mL
+        if not gravity:
+            pressure=pressure_convert(pressure)
+        length = length # cm
+        diameter =  diameter / 10000 # um to cm
+        volume= (pressure * diameter**4 * 3.1416)/ (128 * viscosity * length )  * time
+        volume = volume * 1e6 # to nL
+        volume = round(volume,3)
+
+    except ZeroDivisionError:
+        volume = 0
     return volume
+
           
 def printvolume(volume,radius,length):
     "Returns L"
@@ -349,19 +358,6 @@ def calcelectrokinetic(Voltage,time,length,radius,ueof=6.0e-8):
     volume = volume* 1000  # 1000 L in 1 m^3 so (m^3 * 1000 L / m^3 = L)
     print(printvolume(volume,radius,length))
     print(velocity, 'Velocity')
-    return volume
-
-def gravity(height, time, radius,length=.40, temp=25):
-    density = 997 #kg/m^3
-    G = 9.8 #m/s^2
-    viscosity = table[temp]
-    volume = density * G * 3.1416 * (radius**4) * height * time /\
-             8 / viscosity / length # m^3
-    velocity = density * G  * (radius**2) * height /\
-             8 / viscosity / length
-    volume = volume * 1000 # 1000 L in 1 m^3 so (m^3 * 1000 L / m^3 = L)    
-    print(printvolume(volume,radius,length))
-    print(velocity, ' Velocity ')
     return volume
 
 def ionic_strength():

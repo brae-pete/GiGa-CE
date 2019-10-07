@@ -106,13 +106,16 @@ class separationview(tk.Frame):
         NAME | SHORT NAME | CENTER | WIDTH | CA | CA% | RES(following)|
     Add Peak function
         Creates new row, allows user to select peak manually
+    Add Noise function
+        Saves the start and stop of a noise section for S/N calculations
     Tree View
         Allows users to select multiple peaks to compare across separations (same short name)
         Allows users to select multiple separations to compare electropherograms and peak information
     Export
         Exports selected separations to csv for ORIGIN
         Exports selected separations+peak info for excel    
-""" 
+"""
+    volume = 0
     def __init__(self,parent, controller,session,user,engine, *args, **kwargs):
         """Requires: User(Str)"""
         
@@ -159,6 +162,9 @@ class separationview(tk.Frame):
 
         Addpeakbutton = Button(self.peakframe,text = "Add Peak", command = self.newpeak)
         Addpeakbutton.grid(row = 1, column =1, sticky = "NSEW")
+
+        AddNoise = Button(self.peakframe, text = 'Add Noise', command = self.newnoise)
+        AddNoise.grid(row=5,column=1)
         
         button = Button(self.peakframe, text = "Main Menu", command = lambda: self.controller.show_frame("mainmenu"))
         button.grid(column = 1, row =2, sticky = "NSEW")
@@ -691,18 +697,21 @@ class separationview(tk.Frame):
         coords=[self.startd,self.stopd]
         coords.sort()
         self.coords=coords
-        return 
+        return
+
+    def new_noise(self):
+        # Get coords
+        self.set_width()
+        self.noise = self.coords[:]
         
     def get_injectionvolume(self):
     
-        # Grab Buffer information which holds capillary information
-        bufferid = self.buffers[self.bufferbox.get()]
-        buffer = self.session.query(db.Buffer).filter(db.Buffer.id==bufferid)
-        buffer = buffer.first()
+        # Grab the capillary volume
+        length = self.columnspin.get()
 
         # Open dialog box to get injection volume
-        self.volume = 0
-        starter = Injection.injectionwindow(buffer, self)
+        self.volume = Injection.injectionwindow(length, self)
+
       
     def save_edits(self):
         # Make changes
@@ -721,6 +730,7 @@ class separationview(tk.Frame):
         kwds["poly_value"]=self.poly_value.get()
         kwds["degree"]=self.polyspin.get()
         kwds["skip"]=self.skipspin.get()
+        kwds["noise"]=self.noise
         self.instance.kwds=str(kwds)
         
         #Commit changes to database
@@ -875,7 +885,8 @@ class separationview(tk.Frame):
         else:
             poly = False
             skip = 0
-        peak=peaks.peakcalculations(data[0],data[1],coords[0],coords[1],poly = poly,skip=skip)
+        noise = separation.kwds['noise'] # todo check this function should get noise from here
+        peak=peaks.peakcalculations(data[0],data[1],coords[0],coords[1],noise, poly = poly,skip=skip)
         
         #inst.('peaknumber',place)
         inst.name = self.peaknameentry.get()

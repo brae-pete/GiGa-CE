@@ -188,13 +188,13 @@ class allpeakcalculations():
             area += float(instance.area)
             carea += float(instance.correctedarea)
         return area, carea
-            
-        
+
+
 class peakcalculations():
     """ Requires time, rfu arrays and the start and stop values for the peak
     
     Need to account for RFU Baseline!"""
-    def __init__(self,time,RFU,value1,value2,distance2detector=20,poly = False, skip = 0):
+    def __init__(self,time,RFU,value1,value2,noise,distance2detector=20,poly = False, skip = 0):
         self.time=time
         self.rfu=RFU
         
@@ -211,7 +211,7 @@ class peakcalculations():
         self.distance2detector=distance2detector
         self.start=value1
         self.stop=value2
-        
+        self.noise = noise
         #if len(self.rnrfu)<1:
          #   print(time, "Time \n" , RFU, "RFU\n", value1,value2)
        # print(self.rnrfu)
@@ -302,5 +302,13 @@ class peakcalculations():
         correctedarea=area/m1
         print(correctedarea, " is the CA")
         return correctedarea
-    
+
+    def get_snr(self):
+        tr = self.rnrfu.index(max(self.rnrfu))
+
+        # Get noise from spin box
+
+        # return s/n calculation
+
+
         
