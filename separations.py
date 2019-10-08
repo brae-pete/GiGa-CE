@@ -706,7 +706,7 @@ class separationview(tk.Frame):
         # Get the electropherogram
         separation = self.instance
         Time, RFU = Fileconversion.Readfile(separation.filename)
-
+        RFU  = peaks.baseline(RFU)
         # Get the coordinates
         coords = [self.startd, self.stopd]
         coords.sort()
@@ -780,6 +780,12 @@ class separationview(tk.Frame):
                         skip = eval(kwds["skip"])
                     else:
                         poly_value = False
+
+                    try:
+                        self.noise = kwds['noise']
+                    except KeyError:
+                        self.noise = np.std(RFU[-20:])
+
             except Exception as e:
                 # print(e)
                 poly_value = False
