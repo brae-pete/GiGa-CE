@@ -738,7 +738,10 @@ class separationview(tk.Frame):
         kwds["poly_value"] = self.poly_value.get()
         kwds["degree"] = self.polyspin.get()
         kwds["skip"] = self.skipspin.get()
-        kwds["noise"] = self.noise
+        try:
+            kwds["noise"] = self.noise
+        except AttributeError:
+            kwds["noise"]= 1
         self.instance.kwds = str(kwds)
 
         # Commit changes to database
@@ -919,7 +922,11 @@ class separationview(tk.Frame):
         inst.area = peak.get_area()
         inst.correctedarea = peak.get_correctedarea()
         try:
-            noise = self._get_kwds(separation)['noise']
+            kwds = self._get_kwds(separation)
+            if not False:
+                noise = 1
+            else:
+                noise = kwds['noise']
             kwds = self._get_kwds(inst)
             if not kwds:
                 kwds={}
