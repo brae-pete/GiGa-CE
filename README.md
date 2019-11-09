@@ -12,7 +12,7 @@ Numpy, Scipy, Matplotlib, Pandas, Sqlalchemy, and peakutils.
 If you are using Miniconda or Anaconda, open the anaconda terminal. Activate your environment (optional): 
 
 ~~~
-conda install numpy scipy matplotlib pandas sqlalchemy peakutils
+conda install numpy scipy matplotlib pandas sqlalchemy 
 ~~~
 
 followed by: 
