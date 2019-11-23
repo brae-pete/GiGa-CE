@@ -50,17 +50,17 @@ class baseline():
         try:
             sortedRfu = self.rfu[:]
             sortedRfu.sort()
-            print(sortedRfu[0:1], lower_value, len(sortedRfu) * lower_value)
+            #print(sortedRfu[0:1], lower_value, len(sortedRfu) * lower_value)
             medianIndex = len(sortedRfu) * lower_value
             medianIndex = int(medianIndex)
-            print(type(medianIndex), "IS ", print(medianIndex))
+            #print(type(medianIndex), "IS ", print(medianIndex))
             self.correctedrfu = [i - sortedRfu[medianIndex] for i in self.rfu]
             lowest_value = min(self.correctedrfu)
 
             if lowest_value < 0:
-                print("Correction")
+                #print("Correction")
                 new_correctedrfu = [i - lowest_value for i in self.correctedrfu]
-            print("Finished", len(new_correctedrfu))
+            #print("Finished", len(new_correctedrfu))
             self.correctedrfu = new_correctedrfu
             return new_correctedrfu
         except Exception as e:
@@ -76,13 +76,13 @@ class baseline():
             return self.correctedrfu
 
         base = peakutils.baseline(np.array(self.correctedrfu[skip:]), polynomial)
-        print(base)
-        print(len(base))
+        #print(base)
+        #print(len(base))
         Xtotal = np.linspace(0, len(base) + skip, len(base) + skip)
-        print(len(Xtotal))
-        print(Xtotal)
+        #print(len(Xtotal))
+        #print(Xtotal)
         fit = np.polyfit(Xtotal[skip:], base, polynomial)
-        print(fit)
+        #print(fit)
         p = np.poly1d(fit)
         base = p(Xtotal)
         baseline = list(base)
@@ -222,10 +222,10 @@ class peakcalculations():
         self.time = time
         self.rfu = RFU
 
-        print(self.rfu[0], "Before correction", len(self.rfu))
+        #print(self.rfu[0], "Before correction", len(self.rfu))
         new_baseline = baseline(self.rfu)
         self.rfu = new_baseline.correctedrfu
-        print(self.rfu[0], "After Correction", len(self.rfu))
+        #print(self.rfu[0], "After Correction", len(self.rfu))
         if poly != False:
             self.rfu = np.array(self.rfu)
             self.baseline = new_baseline.peakutils_baseline(poly, skip)
@@ -288,6 +288,9 @@ class peakcalculations():
         m4 = np.sum(rn3) / np.sum(self.rnrfu)
         return m4
 
+    def get_max(self):
+        return max(self.rnrfu)
+
     def get_maxtime(self):
         # get the tr at Max height
         tr = self.rntime[self.rnrfu.index(max(self.rnrfu))]
@@ -299,11 +302,11 @@ class peakcalculations():
         maxrfu = max(self.rnrfu)
         halfmax = maxrfu / 2
         # create a spline of x and blue-np.max(blue)/2 
-        print(len(self.rntime), len(self.rnrfu), len(np.subtract(self.rnrfu, halfmax)))
+        #print(len(self.rntime), len(self.rnrfu), len(np.subtract(self.rnrfu, halfmax)))
         spline = UnivariateSpline(np.asarray(self.rntime), np.subtract(self.rnrfu, halfmax), s=0)
         # find the roots
         roots = spline.roots()
-        print(len(roots))
+        #print(len(roots))
         # if we don't have our peaks separated all the way and cant reach half max
         if len(roots) < 2:
             r2 = self.rntime[-1]
@@ -312,13 +315,13 @@ class peakcalculations():
         else:
             r2 = roots[-1]
             r1 = roots[0]
-            print(r2, r1, "were r's", self.rntime[self.rnrfu.index(maxrfu)])
+            #print(r2, r1, "were r's", self.rntime[self.rnrfu.index(maxrfu)])
             if r2 < self.rntime[self.rnrfu.index(maxrfu)]:
                 r2 = self.rntime[-1]
             if r1 > self.rntime[self.rnrfu.index(maxrfu)]:
                 r1 = self.rntime[0]
         fwhm = np.abs(r2 - r1)
-        print(fwhm, " is the FWHM")
+        #print(fwhm, " is the FWHM")
         self.spline = spline
         return fwhm
 

@@ -39,6 +39,7 @@ class separationsmenu(tk.Frame):
         self.controller = controller  # save to move between windows
         self.session = session
         self.user = user
+
         # Create buttons that will move between different windows
 
         bufferbutton = tk.Button(self, text="Analyze New Separations",
@@ -126,6 +127,7 @@ class separationview(tk.Frame):
         self.engine = engine
         self.selection = 0
         self.controller = controller
+        self.noise=1
         # self.session=self.dbengine.get_session()
 
         self.interior = interior = Frame(self.canvas)
@@ -705,13 +707,13 @@ class separationview(tk.Frame):
     def new_noise(self):
         # Get the electropherogram
         separation = self.instance
-        Time, RFU = Fileconversion.Readfile(separation.filename)
-        RFU  = peaks.baseline(RFU)
+        data = self.rfu_data[separation.id]
         # Get the coordinates
         coords = [self.startd, self.stopd]
         coords.sort()
 
-        self.noise = peaks.noise_calc(RFU, Time, coords)
+        self.noise = peaks.noise_calc(data[2], data[1], coords)
+        print("Noise is {}".format(self.noise))
 
     def get_injectionvolume(self):
 
@@ -728,8 +730,8 @@ class separationview(tk.Frame):
         try:
             bufferid = self.buffers[self.bufferbox.get()]
             self.instance.buffer_id = bufferid
-        except:
-            pass
+        except Exception as e:
+            print("Error {}".format(e))
         self.instance.injectionvolume = self.volume
         kwds = {}
         kwds["Ld"] = self.LDspin.get()
@@ -738,10 +740,12 @@ class separationview(tk.Frame):
         kwds["poly_value"] = self.poly_value.get()
         kwds["degree"] = self.polyspin.get()
         kwds["skip"] = self.skipspin.get()
+        print("Noise is {}".format(self.noise))
         try:
             kwds["noise"] = self.noise
-        except AttributeError:
-            kwds["noise"]= 1
+        except Exception as e:
+            kwds["noise"]= self.noise
+            print(e)
         self.instance.kwds = str(kwds)
 
         # Commit changes to database
@@ -795,6 +799,7 @@ class separationview(tk.Frame):
             # print(type(poly_value),poly_value, "is recorded polyvalue")
             if poly_value == 1:
                 baseline = new_baseline.peakutils_baseline(degree, skip)
+
                 data[-instance.id] = [instance.shortname + 'BASELINE', Time, baseline]
             RFU = new_baseline.correctedrfu
 
@@ -919,17 +924,20 @@ class separationview(tk.Frame):
         inst.m3 = round(peak.get_m3(), 4)
         inst.m4 = round(peak.get_m4(), 4)
         inst.fwhm = round(peak.get_fwhm(), 2)
+        inst.maxtime = round(peak.get_max(), 4)
         inst.area = peak.get_area()
         inst.correctedarea = peak.get_correctedarea()
         try:
             kwds = self._get_kwds(separation)
-            if not False:
-                noise = 1
-            else:
+            try:
                 noise = kwds['noise']
+            except Exception as e:
+                print("Error: {}".format(e))
+                noise =1
             kwds = self._get_kwds(inst)
             if not kwds:
                 kwds={}
+            print("Noise is {}".format(noise))
             kwds['snr']= peak.get_snr(noise)
             inst.kwds=str(kwds)
         except KeyError:
@@ -938,10 +946,9 @@ class separationview(tk.Frame):
         try:
             allpeak = peaks.allpeakcalculations(self.instance.id, self.session)
         except Exception as e:
-            # pass
+            pass
             # print("Not enough data for percent area and plates")
             # allpeak=peaks.allpeakcalculations(self.instance.id,self.session)
-            print(e)
         # Add the row to the database
         self.session.commit()
         # Reload the plot
