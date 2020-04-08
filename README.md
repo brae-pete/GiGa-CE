@@ -4,25 +4,25 @@ A SQLAlchemy Database and GUI for analyzing and storing Electropherograms.
 
 ## Installation
 
-GigaCE runs on python version 3.6.
+GigaCE runs on python version 3.6. 
 
 Download the repository to the PC. Install the following packages:
 Numpy, Scipy, Matplotlib, Pandas, Sqlalchemy, and peakutils. 
 
-If you are using Miniconda or Anaconda, open the anaconda terminal. Activate your environment (optional): 
+If you are using Miniconda, open the anaconda terminal and create the environment:
 
 ~~~
+cd /path/to/GiGa-CE
+conda create --name GigaCE python=3.6
+conda activate GigaCE
 conda install numpy scipy matplotlib pandas sqlalchemy 
-~~~
-
-followed by: 
-
-~~~
 python -m pip install peakutils
 ~~~
 
-Run GigaCE by entering the following (assuming your are in the GigaCE directory)
+Run GigaCE by entering the following in the anaconda prompt:
 ~~~
+cd /path/to/Giga-CE
+conda activate GigaCE
 python main.py 
 ~~~
 
