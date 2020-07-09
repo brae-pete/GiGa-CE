@@ -1,5 +1,6 @@
 import base64
 import io
+from collections import OrderedDict
 
 import dash
 from dash.dependencies import Input, Output, State
@@ -7,17 +8,20 @@ import dash_core_components as dcc
 import dash_html_components as html
 import dash_table
 import plotly.express as px
-
 import pandas as pd
-
+import Electropherogram
 import DataIO
 
 app = dash.Dash(__name__)
-
-separation_columns = ['name', 'filename', 'tags', 'date', 'imgs', 'method']
-separation_columns_type = ['any', 'any', 'any', 'datetime', 'any', 'any']
+separation_columns = ['name', 'date']
+separation_columns_type = ['any', 'datetime']
 
 app.layout = html.Div([
+
+    html.Div(id='electropherogram_df', style={'display': 'none'}),
+    html.Div(id='separation_df', style={'display': 'none'}),
+    html.Div(id='peak_df', style={'display': 'none'}),
+
     dcc.Upload(
         id='upload-data',
         children=html.Div([
@@ -70,12 +74,13 @@ app.layout = html.Div([
     html.Div(children=[
         dcc.RadioItems(id="digital_filter_selection", options=[{'label': 'Butterworth', 'value': 'butter'},
                                                                {'label': 'Savintsky-Golay', 'value': 'savgol'},
-                                                               {'label': 'None', 'value':'none'}]),
+                                                               {'label': 'None', 'value': 'none'}]),
         html.Div(id="filter_options")
     ])
 ])
 
 
+# Background and Filtering Callbacks
 @app.callback(Output('background_options', 'children'), [
     Input('background_radio_selection', 'value')])
 def set_background_menu(background_selection_value):
@@ -124,64 +129,58 @@ def set_filter_menu(filter_selection_value):
                           debounce=True, min=1)]
 
 
-class SeparationController:
+# Separation Callbacks
+@app.callback(
+    Output('separation_graph', 'children'),
+    [Input('data_table_separations', 'derived_virtual_row_ids'),
+     Input('data_table_separations', 'selected_row_ids')],
+    [State('electropherogram_df', 'children')])
+def select_table(selected_rows, row_ids, egram_data):
+    if egram_data is None or selected_rows is None:
+        return
+    if not selected_rows:
+        return
+    print(selected_rows, " is selected rows")
+    egram_df = pd.read_json(egram_data)
+    if egram_df.shape[0] <1:
+        return
+    selected_df = egram_df[egram_df['id'].isin(selected_rows)]
+    fig = px.line(selected_df, x="time", y="rfu", color="name")
+    return dcc.Graph(figure=fig)
 
-    def __init__(self, app):
-        self.app = app
-        self.separations = {}
-        self._row_id = 0
-        app.callback(Output('data_table_separations', 'data'),
-                     [Input('upload-data', 'contents')],
-                     [State('upload-data', 'filename'),
-                      State('upload-data', 'last_modified'),
-                      State('data_table_separations', 'data')])(self.update_table)
 
-        app.callback(
-            Output('separation_graph', 'children'),
-            [Input('data_table_separations', 'derived_virtual_row_ids'),
-             Input('data_table_separations', 'selected_row_ids'),
-             Input('data_table_separations', 'active_cell')])(self.select_table)
+@app.callback(Output('electropherogram_df', 'children'),
+              [Input('upload-data', 'contents')],
+              [State('upload-data', 'filename'),
+               State('upload-data', 'last_modified'),
+               State('electropherogram_df', 'children')])
+def update_egrams(contents, names, dates, old_json):
+    if old_json == None:
+        new_json = pd.DataFrame(columns=['time','rfu','raw','kV','uA','id','name']).to_json()
+    else:
+        new_json = control.add_egram(old_json, contents, names, dates)
+    return new_json
 
-    def update_table(self, list_of_contents, list_of_names, list_of_dates, old_data):
-        if list_of_contents is not None:
-            if old_data is None:
-                data_array = []
-            else:
-                data_array = old_data
-            for content, file_name, modified in zip(list_of_contents, list_of_names, list_of_dates):
-                all_data = {i: None for i in separation_columns}
-                all_data['date'] = modified
-                all_data['filename'] = file_name
-                content_type, content_string = content.split(',')
-                decoded = base64.b64decode(content_string)
-                df, info = DataIO.read_custom_ce_file(decoded)
-                self.separations[self._row_id] = df
-                all_data['id'] = self._row_id
-                self._row_id += 1
-                for key, value in info.items():
-                    all_data[key] = value
-                data_array.append(all_data)
 
-            return data_array
+@app.callback(Output('data_table_separations', 'data'),
+              [Input('upload-data', 'contents')],
+              [State('upload-data', 'filename'),
+               State('upload-data', 'last_modified'),
+               State('data_table_separations', 'data')])
+def update_sep_table(_, names, dates, old_data):
+    """
+    Adds data to a hidden dataframe in JSON
+    Adds data to the Separations Datatable.
+    """
+    if names is None:
+        return old_data
+    new_data = control.add_separation(old_data, names, dates)
 
-    def select_table(self, row_ids, selected_rows, active_cells, *args):
+    return new_data.to_dict('rows')
 
-        all_data_frames = []
-        if selected_rows is None:
-            return
-        for row in selected_rows:
-            df = self.separations[row]
-            df['name'] = row
-            all_data_frames.append(df)
-        if len(all_data_frames) == 0:
-            return
-        data = pd.concat(all_data_frames)
-        print(data.columns)
-        fig = px.line(data, x="time", y=" rfu", color="name")
 
-        return dcc.Graph(figure=fig)
-
+import control
 
 if __name__ == '__main__':
-    sep_controller = SeparationController(app)
     app.run_server(debug=True)
+    data = control

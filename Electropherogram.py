@@ -9,15 +9,18 @@ class Separation:
     """
     Data frame will always hold the raw data and filtered data will not be updated to it.
     """
+    row_id = 0
 
-    def __init__(self, dataframe: pd.DataFrame, row: int):
-        self.data = dataframe[dataframe.iloc[row, :]]
+    def __init__(self, dataframe: pd.DataFrame):
+        self.data = dataframe
         self.rfu = self.get_raw_rfu()
         self.time = self.data.time.values
         self.current = self.data.current.values
         self.voltage = self.data.voltage.values
-
         self.peaks = {}
+        self.id = self.row_id
+        self.data['id'] = self.id
+        self.row_id += 1
 
     def get_raw_rfu(self):
         """
