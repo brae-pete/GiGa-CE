@@ -13,8 +13,8 @@ import Electropherogram
 import DataIO
 
 app = dash.Dash(__name__)
-separation_columns = ['name', 'date']
-separation_columns_type = ['any', 'datetime']
+separation_columns = ['name', 'date','savgol_len', 'savgol_poly']
+separation_columns_type = ['any', 'datetime', 'any', 'any']
 
 app.layout = html.Div([
 
@@ -128,6 +128,17 @@ def set_filter_menu(filter_selection_value):
                           type='number',
                           debounce=True, min=1)]
 
+@app.callback(Output('data_table_separations', 'data'),
+              [Input('savgol_window_length','value'),
+              Input('savgol_poly_fit','value')],
+              [State('data_table_separations','derived_virtual_row_ids'),
+              State('data_table_separations','data')])
+def add_savgol_params(window_length, poly_fit, row_ids, data):
+    df = pd.DataFrame.from_dict(data)
+    sub_df = df[df['id'].isin(row_ids)]
+    sub_df['savgol_len']=window_length
+    sub_df['savgol_poly']=poly_fit
+    return sub_df.to_dict()
 
 # Separation Callbacks
 @app.callback(
@@ -140,7 +151,6 @@ def select_table(selected_rows, row_ids, egram_data):
         return
     if not selected_rows:
         return
-    print(selected_rows, " is selected rows")
     egram_df = pd.read_json(egram_data)
     if egram_df.shape[0] <1:
         return
@@ -159,6 +169,7 @@ def update_egrams(contents, names, dates, old_json):
         new_json = pd.DataFrame(columns=['time','rfu','raw','kV','uA','id','name']).to_json()
     else:
         new_json = control.add_egram(old_json, contents, names, dates)
+        pd.read_json(new_json).to_csv('data_out')
     return new_json
 
 

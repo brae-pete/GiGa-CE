@@ -35,8 +35,11 @@ def read_custom_ce_file(decoded_bytes):
             information['date'] = datetime.datetime.fromisoformat(information['date'])
         return information
 
-    df = pd.read_csv(io.StringIO(decoded_bytes.decode('utf-8')), header=[1])
+    df = pd.read_csv(io.StringIO(decoded_bytes.decode('utf-8')), header=[0])
 
     df = df.rename(columns={x: x.strip() for x in df.columns})
+    df = df.rename(columns={'time_data':'time'})
+    print(df.columns)
+    print(df.shape)
     information = parse_header()
     return df, information
