@@ -13,7 +13,7 @@ import Electropherogram
 import DataIO
 
 app = dash.Dash(__name__)
-separation_columns = ['name', 'date','savgol_len', 'savgol_poly']
+separation_columns = ['name', 'date', 'savgol_len', 'savgol_poly']
 separation_columns_type = ['any', 'datetime', 'any', 'any']
 
 app.layout = html.Div([
@@ -128,70 +128,61 @@ def set_filter_menu(filter_selection_value):
                           type='number',
                           debounce=True, min=1)]
 
-@app.callback(Output('data_table_separations', 'data'),
-              [Input('savgol_window_length','value'),
-              Input('savgol_poly_fit','value')],
-              [State('data_table_separations','derived_virtual_row_ids'),
-              State('data_table_separations','data')])
+
 def add_savgol_params(window_length, poly_fit, row_ids, data):
     df = pd.DataFrame.from_dict(data)
     sub_df = df[df['id'].isin(row_ids)]
-    sub_df['savgol_len']=window_length
-    sub_df['savgol_poly']=poly_fit
+    sub_df['savgol_len'] = window_length
+    sub_df['savgol_poly'] = poly_fit
     return sub_df.to_dict()
+
 
 # Separation Callbacks
 @app.callback(
     Output('separation_graph', 'children'),
-    [Input('data_table_separations', 'derived_virtual_row_ids'),
-     Input('data_table_separations', 'selected_row_ids')],
-    [State('electropherogram_df', 'children')])
-def select_table(selected_rows, row_ids, egram_data):
-    if egram_data is None or selected_rows is None:
+    [Input('data_table_separations', 'selected_row_ids')])
+def graph_data(selected_rows):
+    if selected_rows is None:
         return
     if not selected_rows:
         return
-    egram_df = pd.read_json(egram_data)
-    if egram_df.shape[0] <1:
+    sql_ids = str(selected_rows).replace('[','').replace(']','')
+    sql_query = "SELECT separation.name, data.time, data.rfu FROM separation INNER JOIN" \
+                " data ON separation.id = data.separation_id"\
+                " WHERE separation.id IN ({})".format(sql_ids)
+    egram_df = pd.read_sql(sql_query, engine)
+    print(egram_df.head())
+    if egram_df.shape[0] < 1:
         return
-    selected_df = egram_df[egram_df['id'].isin(selected_rows)]
-    fig = px.line(selected_df, x="time", y="rfu", color="name")
+    fig = px.line(egram_df, x="time", y="rfu", color="name")
     return dcc.Graph(figure=fig)
-
-
-@app.callback(Output('electropherogram_df', 'children'),
-              [Input('upload-data', 'contents')],
-              [State('upload-data', 'filename'),
-               State('upload-data', 'last_modified'),
-               State('electropherogram_df', 'children')])
-def update_egrams(contents, names, dates, old_json):
-    if old_json == None:
-        new_json = pd.DataFrame(columns=['time','rfu','raw','kV','uA','id','name']).to_json()
-    else:
-        new_json = control.add_egram(old_json, contents, names, dates)
-        pd.read_json(new_json).to_csv('data_out')
-    return new_json
 
 
 @app.callback(Output('data_table_separations', 'data'),
               [Input('upload-data', 'contents')],
               [State('upload-data', 'filename'),
-               State('upload-data', 'last_modified'),
-               State('data_table_separations', 'data')])
-def update_sep_table(_, names, dates, old_data):
+               State('upload-data', 'last_modified')])
+def update_sep_table(contents, names, dates):
     """
     Adds data to a hidden dataframe in JSON
     Adds data to the Separations Datatable.
     """
-    if names is None:
-        return old_data
-    new_data = control.add_separation(old_data, names, dates)
-
-    return new_data.to_dict('rows')
+    if names is not None:
+        control.add_separation(engine, sesh, names, dates, contents)
+    sep_df = pd.read_sql('SELECT * FROM separation', engine)
+    return sep_df.to_dict('rows')
 
 
 import control
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+import DataSql
 
+engine = create_engine('sqlite:///data.db', echo=True)
+session = sessionmaker(bind=engine)
+sesh = session()
+DataSql.Base.metadata.create_all(engine)
 if __name__ == '__main__':
-    app.run_server(debug=True)
     data = control
+
+    app.run_server(debug=True)

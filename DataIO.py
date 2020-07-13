@@ -39,7 +39,6 @@ def read_custom_ce_file(decoded_bytes):
 
     df = df.rename(columns={x: x.strip() for x in df.columns})
     df = df.rename(columns={'time_data':'time'})
-    print(df.columns)
-    print(df.shape)
-    information = parse_header()
-    return df, information
+    df = df.rename(columns={'kV':'voltage','uA':'current'})
+
+    return df

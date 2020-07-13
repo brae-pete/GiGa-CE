@@ -1,6 +1,10 @@
+import datetime
+
 import pandas as pd
 import DataIO
+import DataSql
 import base64
+from sqlalchemy.orm import sessionmaker
 
 
 def add_egram(egram_json, contents, names, dates):
@@ -15,15 +19,34 @@ def add_egram(egram_json, contents, names, dates):
         df['id'] = f"{file_name}-{modified}"
         df['name'] = file_name
         df['raw'] = df['rfu']
+
         egram_df = egram_df.append(df, ignore_index=True)
     return egram_df.to_json()
 
-def add_separation(sep_table, names, dates):
+
+def get_single_egram(egram, content, sep_id):
+    content_type, content_string = content.split(',')
+    decoded = base64.b64decode(content_string)
+    df = DataIO.read_custom_ce_file(decoded)
+    df['separation_id'] = sep_id
+    if egram is None:
+        egram = df
+    else:
+        egram = egram.append(df, ignore_index=True)
+    return egram
+
+
+def add_separation(engine, sesh, names, dates, contents):
     """
     Adds the separation information to the table
     """
-    sep_df = pd.DataFrame.from_dict(sep_table)
-    new_data = [[name, date, f"{name}-{date}"] for name, date in zip(names, dates)]
-    new_rows = pd.DataFrame(data=new_data, columns=['name', 'date', 'id'])
-    sep_df = sep_df.append(new_rows, ignore_index=True)
-    return sep_df
+    egram_df = None
+    for name, date, content in zip(names, dates, contents):
+        date = datetime.datetime.fromtimestamp(date)
+        new_sep = DataSql.Separation(name=name, date=date)
+        sesh.add(new_sep)
+        sesh.commit()
+        egram_df = get_single_egram(egram_df, content, new_sep.id)
+
+    egram_df.to_sql('data', engine, if_exists='append', index=False)
+    return
