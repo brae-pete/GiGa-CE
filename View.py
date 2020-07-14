@@ -11,6 +11,8 @@ import plotly.express as px
 import pandas as pd
 import Electropherogram
 import DataIO
+from sqlalchemy import update
+
 
 app = dash.Dash(__name__)
 separation_columns = ['name', 'date', 'savgol_len', 'savgol_poly']
@@ -75,8 +77,30 @@ app.layout = html.Div([
         dcc.RadioItems(id="digital_filter_selection", options=[{'label': 'Butterworth', 'value': 'butter'},
                                                                {'label': 'Savintsky-Golay', 'value': 'savgol'},
                                                                {'label': 'None', 'value': 'none'}]),
-        html.Div(id="filter_options")
-    ])
+        html.Div(id="filter_options", children =[
+            html.Div(id = 'butter_div', children=[
+            dcc.Input(id="butter_order",
+                      placeholder='Filter Order',
+                      type='number',
+                      debounce=True, min=1),
+            dcc.Input(id='butter_cutoff',
+                      placeholder='Cutoff Frequency',
+                      type='number',
+                      debounce=True, min=0)]),
+            html.Div(id='butter_dummy')]),
+
+        html.Div(id="savgol_div", children=[dcc.Input(id="savgol_window_length",
+                          placeholder='Window Length',
+                          type='number',
+                          debounce=True, min=1),
+                dcc.Input(id='savgol_poly_fit',
+                          placeholder='Poly_Fit',
+                          type='number',
+                          debounce=True, min=1)]),
+
+                html.Div(id="savgol_dummy")
+    ]),
+
 ])
 
 
@@ -105,36 +129,55 @@ def set_background_menu(background_selection_value):
                                    debounce=True, min=0, max=100)])
 
 
-@app.callback(Output('filter_options', 'children'),
+@app.callback([Output('butter_div', 'style'),
+               Output('savgol_div', 'style')],
               [Input('digital_filter_selection', 'value')])
 def set_filter_menu(filter_selection_value):
     if filter_selection_value == 'butter':
-        return [dcc.Input(id="butter_order",
-                          placeholder='Filter Order',
-                          type='number',
-                          debounce=True, min=1),
-                dcc.Input(id='butter_cutoff',
-                          placeholder='Cutoff Frequency',
-                          type='number',
-                          debounce=True, min=0)]
+        return {'display':'block'}, {'display':'none'}
 
     elif filter_selection_value == 'savgol':
-        return [dcc.Input(id="savgol_window_length",
-                          placeholder='Window Length',
-                          type='number',
-                          debounce=True, min=1),
-                dcc.Input(id='savgol_poly_fit',
-                          placeholder='Poly_Fit',
-                          type='number',
-                          debounce=True, min=1)]
+        return {'display':'none'}, {'display':'block'}
 
+    else:
+        return {'display':'none'}, {'display':'none'}
 
-def add_savgol_params(window_length, poly_fit, row_ids, data):
-    df = pd.DataFrame.from_dict(data)
-    sub_df = df[df['id'].isin(row_ids)]
-    sub_df['savgol_len'] = window_length
-    sub_df['savgol_poly'] = poly_fit
-    return sub_df.to_dict()
+@app.callback(Output('savgol_dummy', 'children'),
+              [Input('savgol_window_length','value'),
+               Input('savgol_poly_fit','value')],
+              [State('data_table_separations','selected_row_ids'),
+               State('digital_filter_selection','value')])
+def add_savgol_params(window_length, poly_fit, row_ids, filter):
+    """
+    Update the Filtering parameters
+    """
+    if filter != 'savgol':
+        return None
+    sql_ids = str(row_ids).replace('[','').replace(']','')
+    window_length, poly_fit, filter = [ 'NULL' if x is None else x for x in [window_length, poly_fit, filter] ]
+    with engine.connect() as con:
+        rs = con.execute(f"UPDATE separation SET digital = '{filter}', digital_arg1 = {window_length}, digital_arg2={poly_fit} "
+                         f"WHERE separation.id IN ({sql_ids})")
+    return None
+
+@app.callback(Output('butter_dummy', 'children'),
+              [Input('butter_order','value'),
+               Input('butter_cutoff','value')],
+              [State('data_table_separations','selected_row_ids'),
+               State('digital_filter_selection','value')])
+def add_butter_params(order, cutoff, row_ids, filter):
+    """
+    Update the Filtering parameters
+    """
+    if filter != 'butter':
+        return None
+    sql_ids = str(row_ids).replace('[','').replace(']','')
+    order, cutoff, filter = [ 'NULL' if x is None else x for x in [order, cutoff, filter] ]
+
+    with engine.connect() as con:
+        rs = con.execute(f"UPDATE separation SET digital='{filter}', digital_arg1={order}, digital_arg2={cutoff} "
+                         f"WHERE separation.id IN ({sql_ids})")
+    return None
 
 
 # Separation Callbacks
@@ -147,10 +190,11 @@ def graph_data(selected_rows):
     if not selected_rows:
         return
     sql_ids = str(selected_rows).replace('[','').replace(']','')
-    sql_query = "SELECT separation.name, data.time, data.rfu FROM separation INNER JOIN" \
+    sql_query = "SELECT separation.name, data.time, data.rfu, separation.id FROM separation INNER JOIN" \
                 " data ON separation.id = data.separation_id"\
                 " WHERE separation.id IN ({})".format(sql_ids)
     egram_df = pd.read_sql(sql_query, engine)
+    egram_df = control.filter_data(egram_df, sql_ids, engine)
     print(egram_df.head())
     if egram_df.shape[0] < 1:
         return

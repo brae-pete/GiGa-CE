@@ -10,6 +10,7 @@ class Data(Base):
     id = Column(Integer, primary_key=True)
     separation_id = Column(Integer, ForeignKey('separation.id'))
     rfu = Column(Float)
+    raw = Column(Float)
     time = Column(Float)
     current = Column(Float)
     voltage = Column(Float)
@@ -24,6 +25,9 @@ class Separation(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String)
     tags = Column(String)
+    digital = Column(String)
+    digital_arg1 = Column(Integer)
+    digital_arg2 = Column(Float)
     date = Column(DateTime)
     data = relationship("Data")
 

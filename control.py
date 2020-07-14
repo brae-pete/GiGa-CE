@@ -5,6 +5,7 @@ import DataIO
 import DataSql
 import base64
 from sqlalchemy.orm import sessionmaker
+import Electropherogram
 
 
 def add_egram(egram_json, contents, names, dates):
@@ -50,3 +51,19 @@ def add_separation(engine, sesh, names, dates, contents):
 
     egram_df.to_sql('data', engine, if_exists='append', index=False)
     return
+
+
+def filter_data(egram_df, sql_ids, engine):
+    sql_query = f"SELECT id, digital, digital_arg1, digital_arg2 FROM separation WHERE separation.id IN ({sql_ids})"
+    in_data = pd.read_sql(sql_query, engine)
+    for idx in in_data['id'].unique():
+        single_gram = egram_df[egram_df['id'] == idx]
+        single_sep = in_data[in_data['id'] == idx].iloc[0, :]
+        rfu = single_gram
+        if single_sep.digital == 'butter' and single_sep.digital_arg1 is not None and single_sep.digital_arg2 is not None:
+            rfu = Electropherogram.filter_butter(rfu, single_sep.digital_arg2, single_sep.digital_arg1)
+        elif single_sep.digital == 'butter' and single_sep.digital_arg1 is not None and single_sep.digital_arg2 is not None:
+            rfu = Electropherogram.filter_savgol(rfu, single_sep.digital_arg1, single_sep.digital_arg2)
+        single_gram['rfu']=rfu
+        egram_df[egram_df['id'] == idx] = single_gram
+    return egram_df
