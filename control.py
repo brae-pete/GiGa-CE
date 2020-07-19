@@ -62,7 +62,7 @@ def filter_data(egram_df, sql_ids, engine):
         rfu = single_gram
         if single_sep.digital == 'butter' and single_sep.digital_arg1 is not None and single_sep.digital_arg2 is not None:
             rfu = Electropherogram.filter_butter(rfu, single_sep.digital_arg2, single_sep.digital_arg1)
-        elif single_sep.digital == 'butter' and single_sep.digital_arg1 is not None and single_sep.digital_arg2 is not None:
+        elif single_sep.digital == 'savgol' and single_sep.digital_arg1 is not None and single_sep.digital_arg2 is not None:
             rfu = Electropherogram.filter_savgol(rfu, single_sep.digital_arg1, single_sep.digital_arg2)
         single_gram['rfu']=rfu
         egram_df[egram_df['id'] == idx] = single_gram
