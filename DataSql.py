@@ -44,3 +44,32 @@ class Tags(Base):
 
     def __repr__(self):
         return f"<Tags(name={self.name}, ids={self.tags})"
+
+class PeakLookUp(Base):
+    __tablename__ = "peak_lookup"
+    id = Column(Integer, primary_key=True)
+    name = Column(String, unique=True)
+    start = Column(Float)
+    stop = Column(Float)
+    center = Column(Float)
+    deviation = Column(Float)
+    peaks = relationship("PeakData")
+
+class PeakData(Base):
+    __tablename__ = "peak_data"
+    id = Column(Integer, primary_key=True)
+    start = Column(Integer)
+    stop = Column(Integer)
+    m1 = Column(Float)
+    m2 = Column(Float)
+    m3 = Column(Float)
+    m4 = Column(Float)
+    area = Column(Float)
+    corrected_area = Column(Float)
+    max = Column(Float)
+
+    separation_id = Column(Integer, ForeignKey("separation.id"))
+    peak_lut = Column(Integer, ForeignKey("peak_lookup.id"))
+
+    def __repr__(self):
+        return f"<PeakData<start:{self.start}, stop:{self.stop}, m1:{self.m1}, max:{self.max}, ca:{self.corrected_area}"
