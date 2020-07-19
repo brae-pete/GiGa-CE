@@ -13,10 +13,12 @@ import Electropherogram
 import DataIO
 from sqlalchemy import update
 
-
 app = dash.Dash(__name__)
 separation_columns = ['name', 'date', 'savgol_len', 'savgol_poly']
 separation_columns_type = ['any', 'datetime', 'any', 'any']
+
+peak_lut_columns = ['name', 'start', 'stop', 'center', 'deviation', 'buffer']
+peak_lut_columns_type = ['text', 'numeric', 'numeric', 'numeric', 'numeric', 'text']
 
 app.layout = html.Div([
 
@@ -47,9 +49,8 @@ app.layout = html.Div([
         dash_table.DataTable(
             id='data_table_separations',
             columns=[
-                {"name": i, "id": i, "deletable": False, "selectable": True, "hideable": True,
-                 'type': dtype} for i, dtype in zip(separation_columns, separation_columns_type)
-            ],
+                {"name": i, "id": i, "deletable": False, "selectable": True, "hideable": False,
+                 'type': dtype} for i, dtype in zip(separation_columns, separation_columns_type)],
             editable=True,
             filter_action="native",
             sort_action="native",
@@ -77,29 +78,51 @@ app.layout = html.Div([
         dcc.RadioItems(id="digital_filter_selection", options=[{'label': 'Butterworth', 'value': 'butter'},
                                                                {'label': 'Savintsky-Golay', 'value': 'savgol'},
                                                                {'label': 'None', 'value': 'none'}]),
-        html.Div(id="filter_options", children =[
-            html.Div(id = 'butter_div', children=[
-            dcc.Input(id="butter_order",
-                      placeholder='Filter Order',
-                      type='number',
-                      debounce=True, min=1),
-            dcc.Input(id='butter_cutoff',
-                      placeholder='Cutoff Frequency',
-                      type='number',
-                      debounce=True, min=0)]),
+        html.Div(id="filter_options", children=[
+            html.Div(id='butter_div', children=[
+                dcc.Input(id="butter_order",
+                          placeholder='Filter Order',
+                          type='number',
+                          debounce=True, min=1),
+                dcc.Input(id='butter_cutoff',
+                          placeholder='Cutoff Frequency',
+                          type='number',
+                          debounce=True, min=0)]),
             html.Div(id='butter_dummy')]),
 
         html.Div(id="savgol_div", children=[dcc.Input(id="savgol_window_length",
-                          placeholder='Window Length',
-                          type='number',
-                          debounce=True, min=1),
-                dcc.Input(id='savgol_poly_fit',
-                          placeholder='Poly_Fit',
-                          type='number',
-                          debounce=True, min=1)]),
+                                                      placeholder='Window Length',
+                                                      type='number',
+                                                      debounce=True, min=1),
+                                            dcc.Input(id='savgol_poly_fit',
+                                                      placeholder='Poly_Fit',
+                                                      type='number',
+                                                      debounce=True, min=1)]),
 
-                html.Div(id="savgol_dummy")
+        html.Div(id="savgol_dummy")
     ]),
+    html.Div([
+        dash_table.DataTable(
+            id='peak_lut',
+            columns=[{"name": i, "id": i, "selectable": True, "hideable": True,
+                      'type': dtype} for i, dtype in zip(peak_lut_columns, peak_lut_columns_type)],
+            editable=True,
+            filter_action="native",
+            sort_action="native",
+            sort_mode="multi",
+            column_selectable="single",
+            row_selectable="multi",
+            row_deletable=False,
+            selected_columns=[],
+            selected_rows=[],
+            page_action="native",
+            page_current=0,
+            data=[{'peak_name': 'new', 'start': 0.1, 'stop': 0, 'center': 0, 'deviation': 5}],
+            page_size=15),
+
+        html.Button('Add Row', id='add_peak_lut', n_clicks=0),
+        html.Div(id='peak_lut_dummy')
+    ])
 
 ])
 
@@ -134,45 +157,48 @@ def set_background_menu(background_selection_value):
               [Input('digital_filter_selection', 'value')])
 def set_filter_menu(filter_selection_value):
     if filter_selection_value == 'butter':
-        return {'display':'block'}, {'display':'none'}
+        return {'display': 'block'}, {'display': 'none'}
 
     elif filter_selection_value == 'savgol':
-        return {'display':'none'}, {'display':'block'}
+        return {'display': 'none'}, {'display': 'block'}
 
     else:
-        return {'display':'none'}, {'display':'none'}
+        return {'display': 'none'}, {'display': 'none'}
+
 
 @app.callback(Output('savgol_dummy', 'children'),
-              [Input('savgol_window_length','value'),
-               Input('savgol_poly_fit','value')],
-              [State('data_table_separations','selected_row_ids'),
-               State('digital_filter_selection','value')])
+              [Input('savgol_window_length', 'value'),
+               Input('savgol_poly_fit', 'value')],
+              [State('data_table_separations', 'selected_row_ids'),
+               State('digital_filter_selection', 'value')])
 def add_savgol_params(window_length, poly_fit, row_ids, filter):
     """
     Update the Filtering parameters
     """
     if filter != 'savgol':
         return None
-    sql_ids = str(row_ids).replace('[','').replace(']','')
-    window_length, poly_fit, filter = [ 'NULL' if x is None else x for x in [window_length, poly_fit, filter] ]
+    sql_ids = str(row_ids).replace('[', '').replace(']', '')
+    window_length, poly_fit, filter = ['NULL' if x is None else x for x in [window_length, poly_fit, filter]]
     with engine.connect() as con:
-        rs = con.execute(f"UPDATE separation SET digital = '{filter}', digital_arg1 = {window_length}, digital_arg2={poly_fit} "
-                         f"WHERE separation.id IN ({sql_ids})")
+        rs = con.execute(
+            f"UPDATE separation SET digital = '{filter}', digital_arg1 = {window_length}, digital_arg2={poly_fit} "
+            f"WHERE separation.id IN ({sql_ids})")
     return None
 
+
 @app.callback(Output('butter_dummy', 'children'),
-              [Input('butter_order','value'),
-               Input('butter_cutoff','value')],
-              [State('data_table_separations','selected_row_ids'),
-               State('digital_filter_selection','value')])
+              [Input('butter_order', 'value'),
+               Input('butter_cutoff', 'value')],
+              [State('data_table_separations', 'selected_row_ids'),
+               State('digital_filter_selection', 'value')])
 def add_butter_params(order, cutoff, row_ids, filter):
     """
     Update the Filtering parameters
     """
     if filter != 'butter':
         return None
-    sql_ids = str(row_ids).replace('[','').replace(']','')
-    order, cutoff, filter = [ 'NULL' if x is None else x for x in [order, cutoff, filter] ]
+    sql_ids = str(row_ids).replace('[', '').replace(']', '')
+    order, cutoff, filter = ['NULL' if x is None else x for x in [order, cutoff, filter]]
 
     with engine.connect() as con:
         rs = con.execute(f"UPDATE separation SET digital='{filter}', digital_arg1={order}, digital_arg2={cutoff} "
@@ -185,21 +211,10 @@ def add_butter_params(order, cutoff, row_ids, filter):
     Output('separation_graph', 'children'),
     [Input('data_table_separations', 'selected_row_ids')])
 def graph_data(selected_rows):
-    if selected_rows is None:
-        return
-    if not selected_rows:
-        return
-    sql_ids = str(selected_rows).replace('[','').replace(']','')
-    sql_query = "SELECT separation.name, data.time, data.rfu, separation.id FROM separation INNER JOIN" \
-                " data ON separation.id = data.separation_id"\
-                " WHERE separation.id IN ({})".format(sql_ids)
-    egram_df = pd.read_sql(sql_query, engine)
-    egram_df = control.filter_data(egram_df, sql_ids, engine)
-    print(egram_df.head())
-    if egram_df.shape[0] < 1:
-        return
-    fig = px.line(egram_df, x="time", y="rfu", color="name")
-    return dcc.Graph(figure=fig)
+    egram_df = control.get_grams(engine, selected_rows)
+    if egram_df is not None:
+        fig = px.line(egram_df, x="time", y="rfu", color="name")
+        return dcc.Graph(figure=fig)
 
 
 @app.callback(Output('data_table_separations', 'data'),
@@ -215,6 +230,29 @@ def update_sep_table(contents, names, dates):
         control.add_separation(engine, sesh, names, dates, contents)
     sep_df = pd.read_sql('SELECT * FROM separation', engine)
     return sep_df.to_dict('rows')
+
+
+@app.callback(Output('peak_lut', 'data'),
+              [Input('add_peak_lut', 'n_clicks')])
+def update_peak_lut_table(n_clicks):
+    """ Update the Rows of the Peak Look up table to include a new row.
+    Row will not be saved to the database until the name is unique
+    """
+    lut_df = control.get_peak_lut(engine)
+    if n_clicks > 0:
+        row = pd.DataFrame(data=[['New', 0, 0, 0, 5, None]], columns=['name', 'start', 'stop', 'center', 'deviation', 'id'])
+        lut_df = lut_df.append(row, ignore_index=True)
+    return lut_df.to_dict('rows')
+
+
+@app.callback(Output('peak_lut_dummy', 'children'),
+              [Input('peak_lut', 'data')])
+def update_peak_lut_data(data):
+    """
+    Update the sql database
+    """
+    control.update_peak_lut(engine, data)
+
 
 
 import control

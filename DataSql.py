@@ -53,6 +53,7 @@ class PeakLookUp(Base):
     stop = Column(Float)
     center = Column(Float)
     deviation = Column(Float)
+    buffer = Column(String)
     peaks = relationship("PeakData")
 
 class PeakData(Base):
