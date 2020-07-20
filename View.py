@@ -20,11 +20,22 @@ separation_columns_type = ['any', 'datetime', 'any', 'any']
 peak_lut_columns = ['name', 'start', 'stop', 'center', 'deviation', 'buffer']
 peak_lut_columns_type = ['text', 'numeric', 'numeric', 'numeric', 'numeric', 'text']
 
+peak_data_columns = ['name', 'start', 'stop', 'm1', 'corrected_area', 'max', 'snr', 'm2', 'm3', 'm4', 'separations']
+peak_data_columns_type = ['text', 'numeric', 'numeric', 'numeric', 'numeric', 'numeric', 'numeric', 'numeric']
+peak_data_editable = [False]*len(peak_data_columns)
+peak_data_editable[0:3] = [True, True, True]
+
 app.layout = html.Div([
 
     html.Div(id='electropherogram_df', style={'display': 'none'}),
     html.Div(id='separation_df', style={'display': 'none'}),
     html.Div(id='peak_df', style={'display': 'none'}),
+    html.Div(id='separation_graph', style={'position':'fixed',
+                                           'zIndex':50,
+                                           'height':'500px',
+                                           'top':0,
+                                           'marginBottom':500,
+                                           'width':"100%"}),
 
     dcc.Upload(
         id='upload-data',
@@ -32,15 +43,15 @@ app.layout = html.Div([
             'Drag and Drop or ',
             html.A('Select Files')
         ]),
-        style={
-            'width': '50%',
+        style={'marginTop':500,
+            'width': '100%',
             'height': '60px',
             'lineHeight': '60px',
             'borderWidth': '1px',
             'borderStyle': 'dashed',
             'borderRadius': '5px',
             'textAlign': 'center',
-            'margin': '10px'
+            'marginBottom':'10px'
         },
         # Allow multiple files to be uploaded
         multiple=True
@@ -63,8 +74,7 @@ app.layout = html.Div([
             page_action="native",
             page_current=0,
             page_size=15,
-        ),
-        html.Div(id='separation_graph')
+        )
     ]),
     html.Div(id="background_selection", children=[
         dcc.RadioItems(id="background_radio_selection", options=[{'label': 'Percentile Background',
@@ -111,7 +121,6 @@ app.layout = html.Div([
             sort_action="native",
             sort_mode="multi",
             column_selectable="single",
-            row_selectable="multi",
             row_deletable=False,
             selected_columns=[],
             selected_rows=[],
@@ -121,7 +130,26 @@ app.layout = html.Div([
             page_size=15),
 
         html.Button('Add Row', id='add_peak_lut', n_clicks=0),
-        html.Div(id='peak_lut_dummy')
+        html.Div(id='peak_lut_dummy'),
+        html.Button('Find Peaks', id='find_peaks', n_clicks=0),
+        dash_table.DataTable(id='peak_data',
+            columns=[{"name": i, "id": i, "selectable": True, "hideable": True, 'editable':edit,
+                      'type': dtype} for i, dtype, edit in zip(peak_data_columns,
+                                                               peak_data_columns_type,
+                                                               peak_data_editable)],
+            data = [{'name':'Empty'}],
+            filter_action="native",
+            sort_action="native",
+            sort_mode="multi",
+            column_selectable="single",
+            row_selectable="multi",
+            row_deletable=True,
+            selected_columns=[],
+            selected_rows=[],
+            page_action="native",
+            page_current=0,
+            page_size=15)
+
     ])
 
 ])
@@ -214,7 +242,9 @@ def graph_data(selected_rows):
     egram_df = control.get_grams(engine, selected_rows)
     if egram_df is not None:
         fig = px.line(egram_df, x="time", y="rfu", color="name")
-        return dcc.Graph(figure=fig)
+        return dcc.Graph(figure=fig, style={'zIndex':50,
+                                            'width':'100%',
+                                            'height':'100%'})
 
 
 @app.callback(Output('data_table_separations', 'data'),
@@ -238,10 +268,14 @@ def update_peak_lut_table(n_clicks):
     """ Update the Rows of the Peak Look up table to include a new row.
     Row will not be saved to the database until the name is unique
     """
-    lut_df = control.get_peak_lut(engine)
+
     if n_clicks > 0:
-        row = pd.DataFrame(data=[['New', 0, 0, 0, 5, None]], columns=['name', 'start', 'stop', 'center', 'deviation', 'id'])
-        lut_df = lut_df.append(row, ignore_index=True)
+        #row = pd.DataFrame(data=[['New', 0, 0, 0, 5, None]], columns=['name', 'start', 'stop', 'center', 'deviation', 'id'])
+        row = DataSql.PeakLookUp(name='New', start=0, stop=0, center=0, deviation=5)
+        sesh.add(row)
+        sesh.commit()
+
+    lut_df = control.get_peak_lut(engine)
     return lut_df.to_dict('rows')
 
 
@@ -253,6 +287,22 @@ def update_peak_lut_data(data):
     """
     control.update_peak_lut(engine, data)
 
+@app.callback(Output('peak_data', 'data'),
+              [Input('find_peaks', 'n_clicks')],
+              [State('data_table_separations', 'selected_row_ids'),
+               State('peak_lut', 'derived_viewport_row_ids')])
+def get_peaks_from_gram(nclicks, rows, lut_ids):
+    if nclicks > 0:
+        # Get filtered Grams
+        gram_df = control.get_grams(engine, rows)
+        # Find peaks in the gram
+        peak_df = control.find_peaks(gram_df)
+        # Compare to the Look up table
+        # Get lut information
+        lut_ids = str(lut_ids).replace('[', '').replace(']', '')
+        lut_df = pd.read_sql(f"SELECT * FROM peak_lookup WHERE id in ({lut_ids})", engine)
+        peak_df = control.assign_peaks(peak_df, lut_df)
+        return peak_df.to_dict('rows')
 
 
 import control

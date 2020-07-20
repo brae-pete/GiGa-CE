@@ -3,6 +3,7 @@ import numpy as np
 import peakutils
 from scipy import signal
 from scipy.interpolate import UnivariateSpline
+from scipy.stats import moment
 
 
 class Separation:
@@ -149,7 +150,7 @@ def filter_savgol(separation: Separation, window_size: int, poly_order: int):
     return signal.savgol_filter(separation.rfu, window_size, poly_order, mode=mode)
 
 
-def peak_corrected_area(peak: Peak):
+def peak_corrected_area(peak, gram):
     """
      Area needs to be corrected or normalized for diffent mobilities
         CA = A * velocity
@@ -159,32 +160,33 @@ def peak_corrected_area(peak: Peak):
     :param peak: Peak to be analyzed
     :return: corrected area
     """
-    m1, _, _, _ = peak_moments(peak)
-    area = peak_area(peak)
-    corrected_area = area / m1
+
+    #m1, _, _, _ = peak_moments(peak)
+    area = peak_area(peak, gram)
+    corrected_area = area / peak['m1']
     return corrected_area
 
 
-def peak_area(peak: Peak):
+def peak_area(peak, gram):
     """
     Peak area provided by integrating using trapezoidal approximation
     :param peak: Peak to be integrated
     :return: area of the peak
     :rtype: float
     """
-    peak_rfu, peak_time = peak.get_peak_region()
+    peak_rfu, peak_time = get_peak_portions(peak, gram)
     area = np.trapz(peak_rfu, peak_time)
     return area
 
 
-def peak_moments(peak: Peak):
+def peak_moments(peak, gram):
     """
     Returns the first four statistical moments of the peak.
     :param peak: Peak to analyze
     :return : m1, m2, m3, m4
     :rtype : tuple
     """
-    peak_rfu, peak_time = peak.get_peak_region()
+    peak_rfu, peak_time = get_peak_portions(peak, gram)
     # Get the First moment, or tr
     rn3 = np.multiply(peak_rfu, peak_time)
     m1 = sum(rn3) / sum(peak_rfu)
@@ -225,8 +227,22 @@ def peak_max_time(peak: Peak):
     tr = peak_time[peak_rfu.index(max(peak_rfu))]
     return tr
 
+def get_indices(peak_time, value1, value2):
+    """ returns the incices from two coordinate values from the time array"""
+    peak_time = list(peak_time)
+    dt = np.median(np.diff(peak_time))
+    value1 *= dt
+    value2 *= dt
+    start_idx = (np.abs(peak_time - value1)).argmin()
+    stop_idx = (np.abs(peak_time - value2)).argmin()
+    return start_idx, stop_idx, value1, value2
 
-def peak_fwhm(peak: Peak):
+def get_peak_portions(peak, gram):
+    peak_rfu = gram['rfu'].values[peak['start_idx']:peak['stop_idx']]
+    peak_time = gram['time'].values[peak['start_idx']:peak['stop_idx']]
+    return peak_rfu, peak_time
+
+def peak_fwhm(peak, gram):
     """
     Returns the full width half max of the peak.
     Calculates FWHM using a 3rd degree spline of the peak and determining the width at exactly 1/2 of the max signal.
@@ -234,7 +250,7 @@ def peak_fwhm(peak: Peak):
     :return: full width half max
     :rtype : float
     """
-    peak_rfu, peak_time = peak.get_peak_region()
+    peak_rfu, peak_time = get_peak_portions(peak, gram)
     maxrfu = max(peak_rfu)
     halfmax = maxrfu / 2
     # create a spline of x and blue-np.max(blue)/2

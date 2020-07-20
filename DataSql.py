@@ -28,6 +28,7 @@ class Separation(Base):
     digital = Column(String)
     digital_arg1 = Column(Integer)
     digital_arg2 = Column(Float)
+    noise = Column(Float)
     date = Column(DateTime)
     data = relationship("Data")
 
@@ -48,7 +49,7 @@ class Tags(Base):
 class PeakLookUp(Base):
     __tablename__ = "peak_lookup"
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True)
+    name = Column(String)
     start = Column(Float)
     stop = Column(Float)
     center = Column(Float)
@@ -59,8 +60,8 @@ class PeakLookUp(Base):
 class PeakData(Base):
     __tablename__ = "peak_data"
     id = Column(Integer, primary_key=True)
-    start = Column(Integer)
-    stop = Column(Integer)
+    start = Column(Float)
+    stop = Column(Float)
     m1 = Column(Float)
     m2 = Column(Float)
     m3 = Column(Float)
@@ -68,6 +69,8 @@ class PeakData(Base):
     area = Column(Float)
     corrected_area = Column(Float)
     max = Column(Float)
+    start_idx = Column(Integer)
+    stop_idx = Column(Integer)
 
     separation_id = Column(Integer, ForeignKey("separation.id"))
     peak_lut = Column(Integer, ForeignKey("peak_lookup.id"))

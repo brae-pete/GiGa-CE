@@ -3,8 +3,9 @@ import logging
 
 import pandas as pd
 import sqlalchemy
+from scipy import signal
 from sqlalchemy.exc import IntegrityError
-
+import numpy as np
 import DataIO
 import DataSql
 import base64
@@ -96,19 +97,19 @@ def update_peak_lut(engine, data):
                 except IntegrityError as e:
                     logging.warning("Cannot Duplicate Names")
             else:
-                if not row['name'] == 'New':
-                    try:
-                        con.execute(f"INSERT INTO peak_lookup (name, start, stop, center, deviation, buffer) "
-                                    f"VALUES ('{row['name']}', {row['start']}, {row['stop']}, {row['center']},"
-                                    f" {row['deviation']}, '{row['buffer']}')")
+                if not row['name'] == 'New' or row['id'] is not None:
 
-                    except IntegrityError as e:
-                        row_df = pd.read_sql(f"SELECT id FROM peak_lookup WHERE name=='{row['name']}'", engine)
-                        row_id = row_df['id'].values[0]
-                        con.execute(f"UPDATE peak_lookup SET name='{row['name']}', start={row['start']}, "
-                                    f"stop={row['stop']}, center={row['center']}, deviation={row['deviation']}, "
-                                    f"buffer='{row['buffer']}' "
-                                    f"WHERE peak_lookup.id IN ({row_id})")
+                    con.execute(f"INSERT INTO peak_lookup (name, start, stop, center, deviation, buffer) "
+                                f"VALUES ('{row['name']}', {row['start']}, {row['stop']}, {row['center']},"
+                                f" {row['deviation']}, '{row['buffer']}')")
+
+                else:
+                    row_df = pd.read_sql(f"SELECT id FROM peak_lookup WHERE name=='{row['name']}'", engine)
+                    row_id = row_df['id'].values[-1]
+                    con.execute(f"UPDATE peak_lookup SET name='{row['name']}', start={row['start']}, "
+                                f"stop={row['stop']}, center={row['center']}, deviation={row['deviation']}, "
+                                f"buffer='{row['buffer']}' "
+                                f"WHERE peak_lookup.id IN ({row_id})")
 
 
 def filter_data(egram_df, sql_ids, engine):
@@ -125,3 +126,55 @@ def filter_data(egram_df, sql_ids, engine):
         single_gram['rfu'] = rfu
         egram_df[egram_df['id'] == idx] = single_gram
     return egram_df
+
+def assign_peaks(peak_info:pd.DataFrame, peak_lut):
+    peak_lut = pd.DataFrame.from_dict(peak_lut)
+    lut_names = peak_info['name'].values
+    for index, peak in peak_info.iterrows():
+        smallest = 1*10**12
+        for _, lut in peak_lut.iterrows():
+            if lut['center']==0:
+                continue
+            rsd = (peak['m1']-lut['center'])/lut['center']*100
+            if abs(rsd) < lut['deviation'] and abs(rsd) < smallest:
+                smallest = rsd
+                lut_names[index]=lut['name']
+    peak_info['name']=lut_names
+    return peak_info
+def find_peaks(egrams):
+    """
+    Find peaks for each chromatogram from a dataframe of electropherograms and a table of possible peaks
+    """
+    peak_df = None
+    for sep in egrams['id'].unique():
+        df = egrams[egrams['id'] == sep]
+        peaks, _ = signal.find_peaks(df['rfu'], prominence=0.001)
+        prominences = signal.peak_prominences(df['rfu'], peaks, 500)
+        widths = signal.peak_widths(df['rfu'], peaks, 0.995, prominence_data=prominences)
+        rows = get_peak_information(df, peaks, widths)
+        if peak_df is None:
+            peak_df = rows
+        else:
+            peak_df = peak_df.append(rows, ignore_index=True)
+    return peak_df
+
+def get_peak_information(df, peaks, widths):
+    # Get Peak information
+    row = pd.DataFrame()
+    row['name'] = [f"peak_{df['time'].values[x]}" for x in peaks]
+    indices = np.asarray([Electropherogram.get_indices(df['time'].values, start, stop)
+                          for start, stop in zip(widths[2], widths[3])])
+
+    row['start_idx'] = int(indices[:,0])
+    row['stop_idx'] = int(indices[:,1])
+    row['start'] = indices[:,2]
+    row['stop'] = indices[:, 3]
+    row['max'] = [df['rfu'].values[x] for x in peaks]
+    moments = np.asarray([Electropherogram.peak_moments(row_id, df) for _, row_id in row.iterrows()])
+    row['m1'] = moments[:, 0]
+    row['m2'] = moments[:, 1]
+    row['m3'] = moments[:, 2]
+    row['m4'] = moments[:, 3]
+    row['area'] = [Electropherogram.peak_area(row_id, df) for _, row_id in row.iterrows()]
+    row['corrected_area'] = [Electropherogram.peak_corrected_area(row_id, df) for _, row_id in row.iterrows()]
+    return row
