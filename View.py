@@ -77,12 +77,34 @@ app.layout = html.Div([
         )
     ]),
     html.Div(id="background_selection", children=[
+        html.Div(id='poly_dummy'),
+        html.Div(id='median_dummy'),
         dcc.RadioItems(id="background_radio_selection", options=[{'label': 'Percentile Background',
                                                                   'value': 'median'},
                                                                  {'label': 'Polynomial Background',
                                                                   'value': 'poly'},
                                                                  {'label': 'None', 'value': 'None'}]),
-        html.Div(id="background_options")
+        html.Div(id="background_options", children=[
+            html.Div(id="background_poly_div",children=[dcc.Input(id="background_poly_order",
+                                               placeholder='Polynomial Order',
+                                               type='number',
+                                               debounce=True, min=1, max=9),
+                                     dcc.Input(id='background_poly_skip_start',
+                                               placeholder='Skip Start Pts',
+                                               type='number',
+                                               debounce=True, min=0),
+                                     dcc.Input(id='background_poly_skip_end',
+                                               placeholder='Skip End Pts',
+                                               type='number',
+                                               debounce=True, min=0)
+                                     ]),
+            html.Div(id="background_median_div", children=[
+                html.Div([dcc.Input(id='background_median_percentile',
+                                       placeholder='Percentile (ie 30)',
+                                       type='number',
+                                       debounce=True, min=0, max=100)])
+                ])
+        ])
     ]),
     html.Div(children=[
         dcc.RadioItems(id="digital_filter_selection", options=[{'label': 'Butterworth', 'value': 'butter'},
@@ -156,28 +178,18 @@ app.layout = html.Div([
 
 
 # Background and Filtering Callbacks
-@app.callback(Output('background_options', 'children'), [
-    Input('background_radio_selection', 'value')])
+@app.callback([Output('background_poly_div', 'style'),
+               Output('background_median_div', 'style')],
+              [Input('background_radio_selection', 'value')])
 def set_background_menu(background_selection_value):
     if background_selection_value == 'poly':
-        return html.Div([dcc.Input(id="background_poly_order",
-                                   placeholder='Polynomial Order',
-                                   type='number',
-                                   debounce=True, min=1, max=9),
-                         dcc.Input(id='background_poly_skip_start',
-                                   placeholder='Skip Start Pts',
-                                   type='number',
-                                   debounce=True, min=0),
-                         dcc.Input(id='background_poly_skip_end',
-                                   placeholder='Skip End Pts',
-                                   type='number',
-                                   debounce=True, min=0)
-                         ])
+        return {'display': 'block'}, {'display': 'none'}
+
     elif background_selection_value == 'median':
-        return html.Div([dcc.Input(id='background_median_percentile',
-                                   placeholder='Percentile (ie 30)',
-                                   type='number',
-                                   debounce=True, min=0, max=100)])
+        return {'display': 'none'}, {'display': 'block'}
+
+    else:
+        return {'display': 'none'}, {'display': 'none'}
 
 
 @app.callback([Output('butter_div', 'style'),
@@ -193,6 +205,44 @@ def set_filter_menu(filter_selection_value):
     else:
         return {'display': 'none'}, {'display': 'none'}
 
+@app.callback(Output('poly_dummy', 'children'),
+              [Input('background_poly_order', 'value'),
+               Input('background_poly_skip_start', 'value'),
+               Input('background_poly_skip_end', 'value')],
+              [State('data_table_separations', 'selected_row_ids'),
+               State('background_radio_selection', 'value')])
+def add_poly_background_params(order, start_skip, stop_skip, row_ids, filter):
+    """
+    Update the Filtering parameters
+    """
+    if filter != 'poly':
+        return None
+    sql_ids = str(row_ids).replace('[', '').replace(']', '')
+    order, start_skip, stop_skip = ['NULL' if x is None else x for x in [order, start_skip, stop_skip]]
+    with engine.connect() as con:
+        rs = con.execute(
+            f"UPDATE separation SET background = '{filter}', background_arg1 = {order}, skip_start={start_skip}"
+            f" , skip_stop={stop_skip} "
+            f"WHERE separation.id IN ({sql_ids})")
+    return None
+
+@app.callback(Output('median_dummy', 'children'),
+              [Input('background_median_percentile', 'value')],
+              [State('data_table_separations', 'selected_row_ids'),
+               State('background_radio_selection', 'value')])
+def add_median_background_params(percentile, row_ids, filter):
+    """
+    Update the Filtering parameters
+    """
+    if filter != 'median':
+        return None
+    sql_ids = str(row_ids).replace('[', '').replace(']', '')
+    percentile = ['NULL' if x is None else x for x in [percentile]][0]
+    with engine.connect() as con:
+        rs = con.execute(
+            f"UPDATE separation SET background = '{filter}', background_arg1 = {percentile} "
+            f"WHERE separation.id IN ({sql_ids})")
+    return None
 
 @app.callback(Output('savgol_dummy', 'children'),
               [Input('savgol_window_length', 'value'),

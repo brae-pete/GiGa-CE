@@ -53,6 +53,7 @@ def get_grams(engine, selected_rows):
                 " data ON separation.id = data.separation_id" \
                 " WHERE separation.id IN ({})".format(sql_ids)
     egram_df = pd.read_sql(sql_query, engine)
+    egram_df = background_data(egram_df, sql_ids, engine)
     egram_df = filter_data(egram_df, sql_ids, engine)
     if egram_df.shape[0] < 1:
         return
@@ -123,6 +124,23 @@ def filter_data(egram_df, sql_ids, engine):
             rfu = Electropherogram.filter_butter(rfu, single_sep.digital_arg2, single_sep.digital_arg1)
         elif single_sep.digital == 'savgol' and single_sep.digital_arg1 is not None and single_sep.digital_arg2 is not None:
             rfu = Electropherogram.filter_savgol(rfu, single_sep.digital_arg1, single_sep.digital_arg2)
+        single_gram['rfu'] = rfu
+        egram_df[egram_df['id'] == idx] = single_gram
+    return egram_df
+
+
+def background_data(egram_df, sql_ids, engine):
+    sql_query = f"SELECT id, background, background_arg1, skip_start, skip_stop FROM" \
+                f" separation WHERE separation.id IN ({sql_ids})"
+    in_data = pd.read_sql(sql_query, engine)
+    for idx in in_data['id'].unique():
+        single_gram = egram_df[egram_df['id'] == idx]
+        single_sep = in_data[in_data['id'] == idx].iloc[0, :]
+        rfu = single_gram
+        if single_sep.background == 'median' and single_sep.background_arg1 is not None:
+            rfu, _ = Electropherogram.background_median(rfu, single_sep.background_arg1)
+        elif single_sep.background == 'poly' and single_sep.background_arg1 is not None:
+            rfu, _ = Electropherogram.background_poly(rfu, int(single_sep.background_arg1), single_sep.skip_start, single_sep.skip_stop)
         single_gram['rfu'] = rfu
         egram_df[egram_df['id'] == idx] = single_gram
     return egram_df

@@ -75,7 +75,7 @@ def background_median(separation: Separation, percentile=30):
     :return: (rfu, baseline)
     :rtype: tuple
     """
-    lower_median = np.percentile(separation.rfu, percentile=percentile)
+    lower_median = np.percentile(separation.rfu, q=percentile)
     rfu = np.subtract(separation.rfu, lower_median)
 
     return rfu, [lower_median] * len(rfu)
@@ -147,7 +147,7 @@ def filter_savgol(separation: Separation, window_size: int, poly_order: int):
     """
 
     mode = 'mirror'
-    return signal.savgol_filter(separation.rfu, window_size, poly_order, mode=mode)
+    return signal.savgol_filter(separation.rfu, int(window_size), int(poly_order), mode=mode)
 
 
 def peak_corrected_area(peak, gram):
