@@ -235,11 +235,11 @@ def get_indices(peak_time, value1, value2):
     value2 *= dt
     start_idx = (np.abs(peak_time - value1)).argmin()
     stop_idx = (np.abs(peak_time - value2)).argmin()
-    return start_idx, stop_idx, value1, value2
+    return int(start_idx), int(stop_idx), value1, value2
 
 def get_peak_portions(peak, gram):
-    peak_rfu = gram['rfu'].values[peak['start_idx']:peak['stop_idx']]
-    peak_time = gram['time'].values[peak['start_idx']:peak['stop_idx']]
+    peak_rfu = gram['rfu'].values[int(peak['start_idx']):int(peak['stop_idx'])]
+    peak_time = gram['time'].values[int(peak['start_idx']):int(peak['stop_idx'])]
     return peak_rfu, peak_time
 
 def peak_fwhm(peak, gram):

@@ -165,8 +165,8 @@ def get_peak_information(df, peaks, widths):
     indices = np.asarray([Electropherogram.get_indices(df['time'].values, start, stop)
                           for start, stop in zip(widths[2], widths[3])])
 
-    row['start_idx'] = int(indices[:,0])
-    row['stop_idx'] = int(indices[:,1])
+    row['start_idx'] = indices[:,0]
+    row['stop_idx'] = indices[:,1]
     row['start'] = indices[:,2]
     row['stop'] = indices[:, 3]
     row['max'] = [df['rfu'].values[x] for x in peaks]
